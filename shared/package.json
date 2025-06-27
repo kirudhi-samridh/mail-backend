@@ -1,0 +1,22 @@
+{
+  "name": "@lmaa/shared-db",
+  "version": "1.0.0",
+  "description": "Shared database schema and utilities for LMAA microservices",
+  "main": "db/connection.ts",
+  "types": "db/connection.ts",
+  "scripts": {
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.44.2",
+    "pg": "^8.11.5",
+    "postgres": "^3.4.7"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.15.4",
+    "drizzle-kit": "^0.31.2",
+    "typescript": "^5.8.3"
+  }
+} 

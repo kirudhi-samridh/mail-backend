@@ -1,0 +1,29 @@
+{
+  "name": "ai-services",
+  "version": "1.0.0",
+  "description": "AI Services microservice for email summarization and content generation",
+  "main": "app.py",
+  "scripts": {
+    "start": "python app.py",
+    "dev": "python app.py",
+    "install": "pip install -r requirements.txt",
+    "docker:build": "docker build -t ai-services .",
+    "docker:run": "docker run -p 3004:3004 --env-file .env ai-services"
+  },
+  "keywords": [
+    "ai",
+    "microservice",
+    "email",
+    "summarization",
+    "gemini",
+    "flask",
+    "python"
+  ],
+  "author": "LMAA Team",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {},
+  "engines": {
+    "python": ">=3.11"
+  }
+} 

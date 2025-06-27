@@ -1,11 +1,8 @@
 {
-  "name": "api-gateway",
+  "name": "email-sync-proxy-service",
   "version": "1.0.0",
-  "description": "API Gateway for microservices routing and authentication",
+  "description": "Handles email sync, proxying requests to external email APIs, and AI features.",
   "main": "src/app.ts",
-  "directories": {
-    "test": "tests"
-  },
   "scripts": {
     "start": "ts-node src/app.ts",
     "dev": "tsx watch src/app.ts",
@@ -16,26 +13,27 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"
   },
-  "keywords": ["api", "gateway", "microservices", "proxy"],
-  "author": "",
-  "license": "ISC",
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "drizzle-orm": "^0.44.2",
     "express": "^4.19.2",
-    "http-proxy-middleware": "^3.0.0",
+    "googleapis": "^150.0.1",
+    "jsonwebtoken": "^9.0.2",
+    "node-fetch": "^2.7.0",
     "pg": "^8.11.5",
     "postgres": "^3.4.7"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.0.3",
+    "@types/node-fetch": "^2.6.11",
     "@types/pg": "^8.15.4",
     "drizzle-kit": "^0.31.2",
     "ts-node": "^10.9.2",
     "tsx": "^4.10.2",
     "typescript": "^5.8.3"
   }
-}
+} 
