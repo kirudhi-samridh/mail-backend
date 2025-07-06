@@ -53,6 +53,12 @@ echo ""
 echo "🚀 Starting all services..."
 echo ""
 
+# Start queue system first
+echo "🔄 Starting Queue System..."
+npx tsx init-queues.ts &
+QUEUE_PID=$!
+echo "✅ Queue System started with PID: $QUEUE_PID"
+
 # Start all services
 start_service "API Gateway" "api-gateway" "npm run dev"
 start_service "User Management Service" "user-management-service" "npm run dev"
@@ -65,8 +71,10 @@ echo ""
 echo "Service URLs:"
 echo "- API Gateway: http://localhost:3001"
 echo "- User Management: http://localhost:3002"
-echo "- Email Service: http://localhost:3003"
+echo "- Gmail Email Service: http://localhost:3003"
+echo "- Microsoft Email Service: http://localhost:3005"
 echo "- AI Services: http://localhost:3004"
+echo "- Queue System: Background process (PID: $QUEUE_PID)"
 echo ""
 echo "Press Ctrl+C to stop all services"
 echo ""

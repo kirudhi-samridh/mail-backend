@@ -6,7 +6,7 @@ import jwt from 'jsonwebtoken';
 import { google } from 'googleapis';
 import fetch from 'node-fetch';
 import { eq } from 'drizzle-orm';
-import { getDb, users, userEmailAccounts, type UserEmailAccount, type NewUserEmailAccount } from '../../shared/db/connection';
+import { getDb, emailAccounts, type EmailAccount, type NewEmailAccount } from '../../shared/db/connection';
 
 // Load environment variables
 const envPath = path.resolve(__dirname, '../../.env');
@@ -95,41 +95,35 @@ router.post('/api/auth/google/callback', authenticateJWT, async (req: Request, r
         if (refresh_token) {
             console.log(`[EMAIL_SVC] Storing Google refresh token for user: ${saasUserId}`);
             
-            // Check if user already has a Gmail account connected
-            const [existingAccount] = await db
-                .select()
-                .from(userEmailAccounts)
-                .where(eq(userEmailAccounts.userId, saasUserId))
-                .limit(1);
-
-            if (existingAccount) {
-                // Update existing account
-                await db.update(userEmailAccounts)
-                    .set({ 
-                        refreshToken: refresh_token,
-                        updatedAt: new Date()
-                    })
-                    .where(eq(userEmailAccounts.id, existingAccount.id));
-                
-                console.log(`[EMAIL_SVC] Updated existing Gmail account for user: ${saasUserId}`);
-            } else {
-                // Create new email account record
-                const newEmailAccount: NewUserEmailAccount = {
-                    userId: saasUserId,
-                    provider: 'gmail',
-                    refreshToken: refresh_token,
-                };
-                
-                await db.insert(userEmailAccounts).values(newEmailAccount);
-                console.log(`[EMAIL_SVC] Created new Gmail account record for user: ${saasUserId}`);
+            // Get user's email address from Google
+            oauth2Client.setCredentials(tokens);
+            const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+            const profileResponse = await gmail.users.getProfile({ userId: 'me' });
+            const emailAddress = profileResponse.data.emailAddress;
+            
+            if (!emailAddress) {
+                throw new Error('Could not retrieve email address from Google');
             }
+            
+            console.log(`[EMAIL_SVC] Retrieved email address: ${emailAddress}`);
+
+            const newEmailAccount: NewEmailAccount = {
+                userId: saasUserId,
+                provider: 'google',
+                emailAddress: emailAddress,
+                refreshToken: refresh_token
+            };
+
+            await db.insert(emailAccounts).values(newEmailAccount);
+            console.log(`[EMAIL_SVC] Successfully stored Google account for user: ${saasUserId}`);
+            
+            res.status(200).json({ message: 'Google account connected successfully!' });
         } else {
-            console.warn(`[EMAIL_SVC] No new refresh token received for user ${saasUserId}`);
+            console.error('[EMAIL_SVC] No refresh token received from Google.');
+            res.status(400).json({ message: 'Google authentication failed: No refresh token received.' });
         }
-        
-        res.status(200).json({ message: 'Google account connected successfully.' });
     } catch (error: any) {
-        console.error(`[EMAIL_SVC] Error connecting Google account for user ${saasUserId}:`, error.message);
+        console.error('[EMAIL_SVC] Error in Google auth callback:', error.message);
         res.status(500).json({ message: 'Failed to connect Google account.' });
     }
 });
@@ -144,9 +138,9 @@ async function getGmailClient(saasUserId: string) {
     try {
         console.log(`[EMAIL_SVC] Fetching Google refresh token from DB for user: ${saasUserId}`);
         const [emailAccount] = await db
-            .select({ refreshToken: userEmailAccounts.refreshToken })
-            .from(userEmailAccounts)
-            .where(eq(userEmailAccounts.userId, saasUserId))
+            .select({ refreshToken: emailAccounts.refreshToken })
+            .from(emailAccounts)
+            .where(eq(emailAccounts.userId, saasUserId))
             .limit(1);
 
         const refreshToken = emailAccount?.refreshToken;

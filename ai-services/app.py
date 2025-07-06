@@ -9,6 +9,12 @@ import jwt
 from functools import wraps
 from dotenv import load_dotenv
 import markdown
+import base64
+from PIL import Image
+import io
+import json
+import re
+import ast # Used for safely evaluating string representations of dictionaries
 
 # Load environment variables
 load_dotenv(os.path.join(os.path.dirname(__file__), '../.env'))
@@ -28,6 +34,642 @@ PORT = int(os.getenv('AI_SERVICE_PORT', 3004))
 JWT_SECRET = os.getenv('JWT_SECRET', 'your-secret-key')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 EMAIL_SERVICE_URL = f"http://localhost:{os.getenv('EMAIL_SERVICE_PORT', 3003)}"
+
+# ==============================================================================
+#                      RECOMMENDED CODE REPLACEMENT
+# ==============================================================================
+
+import json
+
+# STEP 1: Define your schema as a native Python dictionary. This is much safer.
+SCHEMA_DEFINITION = {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+        "classification": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "enum": [
+                        "Official/Work",
+                        "Primary Conversation",
+                        "Transactional",
+                        "Promotions & Marketing",
+                        "Subscriptions & Newsletters",
+                        "Security Alert",
+                        "Financial / Bills",
+                        "Social & Notifications",
+                        "Other"
+                    ]
+                },
+                "confidenceScore": {
+                    "type": "number",
+                    "description": "A score from 0.0 to 1.0 indicating the AI's confidence in the classification."
+                },
+                "keywordsFound": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "A list of up to 3 keywords from the email that led to this classification."
+                }
+            }
+        },
+        "executiveSummary": {
+            "type": "object",
+            "properties": {
+                "keyMessage": {"type": "string"},
+                "mainActionItems": {"type": "array", "items": {"type": "string"}},
+                "decisions": {"type": "array", "items": {"type": "string"}}
+            },
+            "required": ["keyMessage"]
+        },
+        "actionItems": {
+            "type": "object",
+            "properties": {
+                "tasks": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "description": {"type": "string"},
+                            "responsible": {"type": "string"},
+                            "deadline": {"type": "string", "format": "date"},
+                            "status": {"type": "string"}
+                        },
+                        "required": ["description"]
+                    }
+                },
+                "nextSteps": {"type": "array", "items": {"type": "string"}},
+                "requiredActions": {"type": "array", "items": {"type": "string"}}
+            }
+        },
+        "financialImpact": {
+            "type": "object",
+            "properties": {
+                "revenueImplications": {"type": "array", "items": {"type": "object", "properties": {"description": {"type": "string"}, "value": {"type": ["number", "string", "null"]}, "timeline": {"type": "string"}}}},
+                "costImplications": {"type": "array", "items": {"type": "object", "properties": {"description": {"type": "string"}, "value": {"type": ["number", "string", "null"]}, "timeline": {"type": "string"}}}},
+                "budgetConsiderations": {"type": "array", "items": {"type": "string"}},
+                "monetaryValues": {"type": "array", "items": {"type": "object", "properties": {"description": {"type": "string"}, "amount": {"type": ["number", "string"]}, "currency": {"type": "string"}}}},
+                "financialDeadlines": {"type": "array", "items": {"type": "object", "properties": {"description": {"type": "string"}, "date": {"type": "string", "format": "date"}}}}
+            }
+        },
+        # ... and so on for all your other sections like marketingImpact, salesImpact, etc.
+        # Ensure the entire schema is defined here as a Python dictionary.
+        "marketingImpact": {
+            "type": "object",
+            "properties": {
+                "brandImplications": {"type": "array", "items": {"type": "string"}},
+                "campaignEffects": {"type": "array", "items": {"type": "string"}},
+                "marketPositioning": {"type": "array", "items": {"type": "string"}},
+                "resourcesNeeded": {"type": "array", "items": {"type": "string"}},
+                "communicationRequirements": {"type": "array", "items": {"type": "string"}}
+            }
+        },
+        "salesImpact": {
+             "type": "object",
+             "properties": {
+                 "salesTargets": {"type": "array", "items": {"type": "string"}},
+                 "customerRelationships": {"type": "array", "items": {"type": "string"}},
+                 "processChanges": {"type": "array", "items": {"type": "string"}},
+                 "revenueProjections": {"type": "array", "items": {"type": "object", "properties": {"period": {"type": "string"}, "amount": {"type": ["number", "string"]}, "notes": {"type": "string"}}}},
+                 "teamRequirements": {"type": "array", "items": {"type": "string"}}
+             }
+        },
+        "legalImpact": {
+            "type": "object",
+            "properties": {
+                "complianceRequirements": {"type": "array", "items": {"type": "string"}},
+                "legalRisks": {"type": "array", "items": {"type": "string"}},
+                "contractImplications": {"type": "array", "items": {"type": "string"}},
+                "regulatoryConsiderations": {"type": "array", "items": {"type": "string"}},
+                "requiredLegalActions": {"type": "array", "items": {"type": "string"}}
+            }
+        },
+        "keyDates": {
+            "type": "array",
+            "items": {"type": "object", "properties": {"date": {"type": "string", "format": "date"},"description": {"type": "string"},"type": {"type": "string","enum": ["deadline", "implementation", "meeting", "review", "followup"]}}}
+        },
+        "keyStakeholders": {
+            "type": "array",
+            "items": {"type": "object", "properties": {"name": {"type": "string"},"role": {"type": "string"},"type": {"type": "string","enum": ["decision_maker", "team_member", "external_party", "required_participant"]},"responsibilities": {"type": "array", "items": {"type": "string"}}}}
+        },
+        "additionalImportantPoints": {
+            "type": "object",
+            "properties": {
+                "technicalConsiderations": {"type": "array", "items": {"type": "string"}},
+                "resourceRequirements": {"type": "array", "items": {"type": "string"}},
+                "riskFactors": {"type": "array", "items": {"type": "object", "properties": {"description": {"type": "string"},"severity": {"type": "string","enum": ["low", "medium", "high", "critical"]},"mitigationPlan": {"type": "string"}}}},
+                "dependencies": {"type": "array", "items": {"type": "string"}},
+                "openQuestions": {"type": "array", "items": {"type": "string"}}
+            }
+        },
+        "audioScript": {
+            "type": "string",
+            "description": "A concise, natural language summary script of the executive summary and main action items, written to be read aloud in under 30 seconds."
+        },
+        "metadata": {
+            "type": "object",
+            "properties": {
+                "generatedDate": {"type": "string", "format": "date-time"},
+                "lastUpdated": {"type": "string", "format": "date-time"},
+                "version": {"type": "string"},
+                "source": {"type": "string"}
+            }
+        }
+    },
+    "required": ["executiveSummary"]
+}
+
+def is_section_empty(section_data):
+    """
+    Recursively checks if a section of the parsed dictionary is empty or just contains "N/A".
+    """
+    if isinstance(section_data, str):
+        return section_data.strip().lower() == 'n/a' or not section_data.strip()
+    if isinstance(section_data, list):
+        return not section_data
+    if isinstance(section_data, dict):
+        return all(is_section_empty(v) for v in section_data.values())
+    return True # Default to empty if format is unrecognized
+
+def extract_keys_from_schema(schema_dict: dict) -> set:
+    """
+    Recursively walks a JSON schema and extracts all possible key names
+    from 'properties' sections.
+    """
+    keys = set()
+    if isinstance(schema_dict, dict):
+        # Check for properties in the current level
+        if 'properties' in schema_dict and isinstance(schema_dict['properties'], dict):
+            for key, value in schema_dict['properties'].items():
+                keys.add(key)
+                # Recursively call for nested objects
+                keys.update(extract_keys_from_schema(value))
+        
+        # Check for properties within 'items' (for arrays of objects)
+        if 'items' in schema_dict and isinstance(schema_dict['items'], dict):
+            keys.update(extract_keys_from_schema(schema_dict['items']))
+            
+    return keys
+
+schema_as_json_string = json.dumps(SCHEMA_DEFINITION, indent=2)
+
+prompt_text = f"""
+You are a meticulous and highly intelligent business analyst AI. Your primary skill is to discern the true commercial intent of an email, looking past misleading marketing tactics.
+Your task is to analyze the email content and generate a structured summary based on a strict JSON template given below. 
+You must follow all instructions and formatting rules precisely.
+
+---
+Core Instructions:
+
+1.  **Analyze:** Carefully read the entire email provided at the end of this prompt, including the headers, body, and footer.
+2.  **Extract:** Identify the key message, all action items, responsible parties, deadlines, and financial details.
+3.  **Populate:** Fill in the provided JSON Analysis Summary template using only the information from the email.
+4.  **Classify:** Based on your analysis, populate the `classification` object in the JSON output.
+
+---
+Advanced Instructions for Classification:
+
+-   **Prioritize the Primary Goal:** Your most important task is to determine the sender's ultimate goal. Ask yourself: "What does the sender want the user to *do*?" If the goal is to get the user to sign up, upgrade, "get started," or purchase something new, the category is **Promotional**, even if the email mentions a past purchase.
+-   **Beware of Disguised Emails:** Marketing emails will often contain phrases like "you are receiving this because you are a customer" to seem transactional. You must recognize this tactic. The true category is defined by the main call-to-action (e.g., "Grow your business," "Get started"), not the legal text in the footer.
+-   **Confidence Score Nuance:** Use a lower confidence score (e.g., 0.75-0.85) if you detect conflicting signals like this. Use a very high score (0.95+) only when all signals (sender, subject, body, call-to-action) are in perfect alignment.
+-   **Keywords Justification:** Your `keywordsFound` must reflect the *true intent*. For the GoDaddy email, good keywords would be "Grow your business," "AI-augmented experience," and "Keep Going," as these point to the promotional goal.
+
+---
+Formatting Rules:
+
+-   Omit Empty Sections: If an entire section has no relevant information in the email, omit the entire section from your output.
+-   Handle Missing Subsections: If a specific subsection has no relevant information, provide an empty list `[]` for arrays or "N/A" for strings.
+
+---
+Generate Audio Script: After completing the rest of the JSON, create a concise, natural-language paragraph for the `audioScript` field.
+- The script must be written as if an executive assistant is reading a summary aloud.
+- It must ONLY include the most critical points from the `executiveSummary` and a brief mention of the main `actionItems`.
+- Begin with a natural phrase like 'Here's a quick summary...' or 'In short...'.
+- Keep the entire script under 50 words for a quick listening experience.
+
+*** The JSON template you MUST follow is:
+{schema_as_json_string}
+"""
+
+# Find the start and end of the JSON schema within the prompt string
+json_start = prompt_text.find('{')
+json_end = prompt_text.rfind('}') + 1
+schema_str = prompt_text[json_start:json_end]
+
+# Load the schema string into a Python dictionary
+schema_dict = json.loads(schema_str)
+
+# DYNAMICALLY generate the complete set of all keys from your schema
+ALL_SCHEMA_KEYS = extract_keys_from_schema(schema_dict)
+
+# Initialize Google Cloud Vision client with error handling
+try:
+    from google.cloud import vision
+    vision_client = vision.ImageAnnotatorClient()
+    VISION_API_AVAILABLE = True
+    logger.info("[OCR] Google Cloud Vision API initialized successfully")
+except ImportError as e:
+    logger.warning(f"[OCR] Google Cloud Vision API not available: {str(e)}")
+    logger.warning("[OCR] Falling back to alternative OCR methods")
+    vision_client = None
+    VISION_API_AVAILABLE = False
+except Exception as e:
+    logger.error(f"[OCR] Error initializing Google Cloud Vision API: {str(e)}")
+    vision_client = None
+    VISION_API_AVAILABLE = False
+
+# OCR Service Functions
+def extract_text_from_image_url(image_url, image_name="unknown"):
+    """
+    Extract text from image URL using Google Cloud Vision API
+    """
+    if not VISION_API_AVAILABLE:
+        logger.warning(f"[OCR] Vision API not available, cannot process image URL: {image_url}")
+        return {"text": "", "confidence": 0, "error": "Vision API not available"}
+    
+    try:
+        logger.info(f"[OCR] Fetching image from URL: {image_url}")
+        
+        # Fetch the image from URL
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        
+        response = requests.get(image_url, headers=headers, timeout=30)
+        response.raise_for_status()
+        
+        # Check if the response is actually an image
+        content_type = response.headers.get('content-type', '').lower()
+        if not content_type.startswith('image/'):
+            logger.warning(f"[OCR] URL does not return an image. Content-Type: {content_type}")
+            return {"text": "", "confidence": 0, "error": f"Not an image: {content_type}"}
+        
+        # Create Vision API image object
+        image_data = response.content
+        image = vision.Image(content=image_data)
+        
+        # Perform OCR
+        ocr_response = vision_client.text_detection(image=image)
+        texts = ocr_response.text_annotations
+        
+        if ocr_response.error.message:
+            raise Exception(f"Vision API error: {ocr_response.error.message}")
+        
+        if not texts:
+            logger.info(f"[OCR] No text detected in image from URL: {image_url}")
+            return {"text": "", "confidence": 0}
+        
+        # First annotation contains the full text
+        full_text = texts[0].description
+        
+        # Calculate average confidence (Vision API doesn't always provide confidence)
+        confidence = 0.9  # Default high confidence for successful detection
+        
+        logger.info(f"[OCR] Successfully extracted {len(full_text)} characters from image URL: {image_url}")
+        
+        return {
+            "text": full_text,
+            "confidence": confidence
+        }
+        
+    except requests.RequestException as e:
+        logger.error(f"[OCR] Error fetching image from URL {image_url}: {str(e)}")
+        return {"text": "", "confidence": 0, "error": f"Fetch error: {str(e)}"}
+    except Exception as e:
+        logger.error(f"[OCR] Error processing image from URL {image_url}: {str(e)}")
+        return {"text": "", "confidence": 0, "error": str(e)}
+
+def extract_text_from_image_base64(image_base64, image_name="unknown"):
+    """
+    Extract text from base64 encoded image using Google Cloud Vision API
+    """
+    if not VISION_API_AVAILABLE:
+        logger.warning(f"[OCR] Vision API not available, cannot process image: {image_name}")
+        return {"text": "", "confidence": 0, "error": "Vision API not available"}
+    
+    try:
+        logger.info(f"[OCR] Processing image: {image_name}")
+        
+        # Decode base64 image
+        image_data = base64.b64decode(image_base64)
+        image = vision.Image(content=image_data)
+        
+        # Perform OCR
+        response = vision_client.text_detection(image=image)
+        texts = response.text_annotations
+        
+        if response.error.message:
+            raise Exception(f"Vision API error: {response.error.message}")
+        
+        if not texts:
+            logger.info(f"[OCR] No text detected in image: {image_name}")
+            return {"text": "", "confidence": 0}
+        
+        # First annotation contains the full text
+        full_text = texts[0].description
+        
+        # Calculate average confidence (Vision API doesn't always provide confidence)
+        confidence = 0.9  # Default high confidence for successful detection
+        
+        logger.info(f"[OCR] Successfully extracted {len(full_text)} characters from image: {image_name}")
+        
+        return {
+            "text": full_text,
+            "confidence": confidence
+        }
+        
+    except Exception as e:
+        logger.error(f"[OCR] Error processing image {image_name}: {str(e)}")
+        return {"text": "", "confidence": 0, "error": str(e)}
+
+def process_email_with_images(email_data):
+    """
+    Process email data and extract text from any images
+    Handles multiple image sources: inline base64, attachments, embedded images, and external URLs
+    """
+    # Extract basic email content
+    email_body = email_data.get('body', '')
+    image_content = []
+    
+    logger.info(f"[OCR] Processing email for images. Body length: {len(email_body) if email_body else 0}")
+    
+    # Check 1: Look for inline base64 images in HTML content
+    if email_body:
+        # Pattern for base64 embedded images: data:image/type;base64,data
+        base64_pattern = r'<img[^>]+src="data:image/([^;]+);base64,([^"]+)"[^>]*>'
+        base64_matches = re.findall(base64_pattern, email_body)
+        
+        logger.info(f"[OCR] Found {len(base64_matches)} inline base64 images")
+        
+        for i, (img_type, img_data) in enumerate(base64_matches):
+            image_name = f"inline_image_{i+1}.{img_type}"
+            logger.info(f"[OCR] Processing inline image: {image_name}")
+            
+            try:
+                ocr_result = extract_text_from_image_base64(img_data, image_name)
+                
+                if ocr_result["text"]:
+                    image_content.append({
+                        "imageName": image_name,
+                        "extractedText": ocr_result["text"]
+                    })
+                    logger.info(f"[OCR] Successfully extracted text from {image_name}: {len(ocr_result['text'])} characters")
+                else:
+                    logger.info(f"[OCR] No text found in {image_name}")
+            except Exception as e:
+                logger.error(f"[OCR] Failed to process inline image {image_name}: {str(e)}")
+    
+    # Check 2: Look for external image URLs (like in your screenshot)
+    if email_body:
+        # Pattern for external image URLs: src="http://..." or src="https://..."
+        url_pattern = r'<img[^>]+src="(https?://[^"]+)"[^>]*>'
+        url_matches = re.findall(url_pattern, email_body)
+        
+        logger.info(f"[OCR] Found {len(url_matches)} external image URLs")
+        
+        for i, img_url in enumerate(url_matches):
+            image_name = f"external_image_{i+1}"
+            logger.info(f"[OCR] Processing external image: {image_name} from URL: {img_url}")
+            
+            try:
+                # Fetch and process external image
+                ocr_result = extract_text_from_image_url(img_url, image_name)
+                
+                if ocr_result["text"]:
+                    image_content.append({
+                        "imageName": image_name,
+                        "extractedText": ocr_result["text"],
+                        "imageUrl": img_url
+                    })
+                    logger.info(f"[OCR] Successfully extracted text from {image_name}: {len(ocr_result['text'])} characters")
+                else:
+                    logger.info(f"[OCR] No text found in {image_name}")
+            except Exception as e:
+                logger.error(f"[OCR] Failed to process external image {image_name}: {str(e)}")
+    
+    # Check 3: Look for image references that might indicate attachments
+    image_references = []
+    if email_body:
+        # Pattern for CID (Content-ID) references: src="cid:image001.jpg"
+        cid_pattern = r'src="cid:([^"]+)"'
+        cid_matches = re.findall(cid_pattern, email_body)
+        image_references.extend(cid_matches)
+        
+        # Pattern for attachment references: src="attachment:filename"
+        attachment_pattern = r'src="attachment:([^"]+)"'
+        attachment_matches = re.findall(attachment_pattern, email_body)
+        image_references.extend(attachment_matches)
+        
+        # Pattern for regular image tags that might reference external or embedded images
+        img_src_pattern = r'<img[^>]+src="([^"]+)"[^>]*>'
+        img_matches = re.findall(img_src_pattern, email_body)
+        
+        # Filter out data: URLs (already processed) and http/https URLs (already processed)
+        for src in img_matches:
+            if not src.startswith(('data:', 'http:', 'https:')):
+                image_references.append(src)
+    
+    if image_references:
+        logger.info(f"[OCR] Found {len(image_references)} image references that may need attachment processing: {image_references}")
+    
+    # Check 4: Look for email attachments (if provided by email service)
+    attachments = email_data.get('attachments', [])
+    if attachments:
+        logger.info(f"[OCR] Found {len(attachments)} attachments to check for images")
+        
+        for attachment in attachments:
+            filename = attachment.get('filename', '')
+            mime_type = attachment.get('mimeType', '')
+            content = attachment.get('content', '')  # base64 encoded content
+            
+            # Check if attachment is an image
+            if is_image_attachment(filename, mime_type):
+                logger.info(f"[OCR] Processing image attachment: {filename}")
+                
+                try:
+                    ocr_result = extract_text_from_image_base64(content, filename)
+                    
+                    if ocr_result["text"]:
+                        image_content.append({
+                            "imageName": filename,
+                            "extractedText": ocr_result["text"]
+                        })
+                        logger.info(f"[OCR] Successfully extracted text from attachment {filename}: {len(ocr_result['text'])} characters")
+                    else:
+                        logger.info(f"[OCR] No text found in attachment {filename}")
+                except Exception as e:
+                    logger.error(f"[OCR] Failed to process attachment {filename}: {str(e)}")
+    
+    # Check 5: Look for common image indicators in email content
+    has_image_indicators = check_for_image_indicators(email_body)
+    
+    logger.info(f"[OCR] Email processing complete. Found {len(image_content)} images with text")
+    logger.info(f"[OCR] Image indicators detected: {has_image_indicators}")
+    
+    return {
+        "emailBody": email_body,
+        "imageContent": image_content,
+        "attachmentContent": [],  # TODO: Add attachment processing for non-images
+        "hasImages": len(image_content) > 0 or len(image_references) > 0 or has_image_indicators,
+        "imageReferences": image_references,
+        "imageIndicators": has_image_indicators
+    }
+
+def is_image_attachment(filename, mime_type):
+    """
+    Check if an attachment is an image based on filename and MIME type
+    """
+    if not filename and not mime_type:
+        return False
+    
+    # Check MIME type first (most reliable)
+    if mime_type:
+        return mime_type.startswith('image/')
+    
+    # Check file extension as fallback
+    if filename:
+        image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif', '.svg']
+        filename_lower = filename.lower()
+        return any(filename_lower.endswith(ext) for ext in image_extensions)
+    
+    return False
+
+def check_for_image_indicators(email_body):
+    """
+    Check for common indicators that an email contains images
+    """
+    if not email_body:
+        return []
+    
+    indicators = []
+    
+    # Check for image-related HTML tags
+    if '<img' in email_body.lower():
+        indicators.append('img_tags')
+    
+    # Check for common image-related text
+    image_keywords = [
+        'see attached image', 'image attached', 'screenshot', 'chart', 'graph', 
+        'diagram', 'photo', 'picture', 'visual', 'see below', 'attached file',
+        'please find attached', 'image shows', 'as shown in', 'refer to image'
+    ]
+    
+    email_lower = email_body.lower()
+    for keyword in image_keywords:
+        if keyword in email_lower:
+            indicators.append(f'keyword_{keyword.replace(" ", "_")}')
+    
+    # Check for CID references
+    if 'cid:' in email_body:
+        indicators.append('cid_references')
+    
+    # Check for attachment references
+    if 'attachment:' in email_body:
+        indicators.append('attachment_references')
+    
+    return indicators
+
+# Helper function to check for empty data
+def is_section_empty(section_data):
+    if isinstance(section_data, str):
+        return section_data.strip().lower() in ['n/a', '']
+    if isinstance(section_data, list):
+        return not section_data
+    if isinstance(section_data, dict):
+        return all(is_section_empty(v) for v in section_data.values())
+    return True
+
+# In your Python script (e.g., app.py)
+# This is the FINAL version of this function.
+
+def generate_html_breakdown(parsed_dict: dict) -> dict:
+    """
+    Final version. Wraps each individual snippet in the breakdown with the
+    container class to ensure consistent styling.
+    """
+    if not parsed_dict or not isinstance(parsed_dict, dict):
+        return {"breakdown": {}, "full_html": "<p>No summary data available.</p>"}
+
+    # --- Helper functions (no changes needed) ---
+    def format_title(key_str: str) -> str:
+        # ... (implementation from previous response is correct)
+        return re.sub(r'(?<!^)(?=[A-Z])', ' ', key_str).replace('_', ' ').title()
+
+    def render_list_of_dicts(items):
+        # ... (implementation from previous response is correct)
+        if not items: return "<p><em>N/A</em></p>"
+        if isinstance(items, dict): items = [items]
+        if not isinstance(items, list): return f"<p>{items}</p>"
+        item_html_parts = ['<ul class="item-list">']
+        for item in items:
+            if isinstance(item, dict):
+                item_html_parts.append('<li class="item-card">')
+                for k, v in item.items():
+                    item_html_parts.append(f'<div><strong>{format_title(k)}:</strong> ')
+                    if isinstance(v, list):
+                        item_html_parts.append("<ul>" + "".join(f"<li>{val}</li>" for val in v) + "</ul>")
+                    else:
+                        item_html_parts.append(str(v))
+                    item_html_parts.append('</div>')
+                item_html_parts.append('</li>')
+            else:
+                item_html_parts.append(f'<li>{item}</li>')
+        item_html_parts.append('</ul>')
+        return "".join(item_html_parts)
+
+    def render_section_content(data):
+        # ... (implementation from previous response is correct)
+        content_parts = []
+        if isinstance(data, dict):
+            for minor_key, content in data.items():
+                content_parts.append(f'<h5>{format_title(minor_key)}</h5>')
+                if not content and not isinstance(content, bool):
+                    content_parts.append('<p><em>N/A</em></p>')
+                else:
+                    content_parts.append(render_list_of_dicts(content))
+        elif isinstance(data, list):
+            content_parts.append(render_list_of_dicts(data))
+        else:
+            content_parts.append(f'<p>{str(data) if data else "<em>N/A</em>"}</p>')
+        return "".join(content_parts)
+
+    # --- Main Logic ---
+    html_breakdown = {}
+    full_html_parts = []
+    for major_key, section_data in parsed_dict.items():
+        if is_section_empty(section_data):
+            continue
+        
+        content_html = render_section_content(section_data)
+        
+        # THE FIX FOR ISSUE #3 IS HERE:
+        # Wrap each individual snippet in the container div so CSS styles apply correctly.
+        html_breakdown[major_key] = f'<div class="summary-container">{content_html}</div>'
+        
+        full_html_parts.append(f"<h4>{format_title(major_key)}</h4>{content_html}")
+
+    full_html_with_styles = f'<div class="summary-container">{"".join(full_html_parts)}</div>'
+
+    return {
+        "breakdown": html_breakdown,
+        "full_html": full_html_with_styles
+    }
+
+def convert_json_to_html(json_data: dict) -> str:
+    """
+    Convert JSON data to HTML format using the existing generate_html_breakdown function.
+    This is a convenience wrapper for the test endpoints.
+    """
+    if not json_data or not isinstance(json_data, dict):
+        return "<p>No data available to convert.</p>"
+    
+    try:
+        html_result = generate_html_breakdown(json_data)
+        return html_result['full_html']
+    except Exception as e:
+        logger.error(f"Error converting JSON to HTML: {str(e)}")
+        return f"<p>Error converting data to HTML: {str(e)}</p>"
 
 # Intelligent Markdown Cleaner and HTML Converter
 class IntelligentMarkdownProcessor:
@@ -501,228 +1143,103 @@ def health_check():
         'gemini_configured': GEMINI_API_KEY is not None
     }), 200
 
+# In your Python script (e.g., app.py)
+# This is the new, simpler, and final version of the function.
+
 @app.route('/api/emails/<email_id>/summarize', methods=['POST'])
 @authenticate_jwt
 def summarize_email(email_id):
-    """Generate AI-powered summary of email content"""
     user_id = request.user.get('id')
     logger.info(f"Received request to summarize email ID: {email_id} for user: {user_id}")
     
     if not GEMINI_API_KEY:
-        logger.error("Gemini API is not configured")
         return jsonify({'message': 'AI service is not properly configured'}), 500
-    
+
     try:
-        # Fetch email content from email service
-        logger.info(f"Fetching email content for ID: {email_id}")
-        headers = {'Authorization': request.headers.get('Authorization')}
+        # --- Step 1: Fetch and Prepare Email Content (No changes here) ---
+        # Check if email data is provided in the request body
+        request_data = request.get_json()
         
-        response = requests.get(
-            f"{EMAIL_SERVICE_URL}/api/emails/{email_id}",
-            headers=headers,
-            timeout=30
-        )
+        if request_data and request_data.get('body'):
+            # Use email data from request body (preferred for database emails)
+            body = request_data.get('body', '')
+            logger.info(f"Using email data from request body for email: {email_id}")
+            email_data = request_data
+        else:
+            # Fallback: fetch from email service (for Gmail message IDs)
+            headers = {'Authorization': request.headers.get('Authorization')}
+            response = requests.get(f"{EMAIL_SERVICE_URL}/api/emails/{email_id}", headers=headers, timeout=30)
+            response.raise_for_status()
+            email_data = response.json()
+            body = email_data.get('body', '')
+            logger.info(f"Fetched email data from email service for email: {email_id}")
         
-        if not response.ok:
-            logger.error(f"Failed to fetch email content: {response.status_code} - {response.text}")
-            return jsonify({'message': 'Failed to fetch email content'}), response.status_code
+        processed_data = process_email_with_images(email_data)
+        body = processed_data.get('emailBody', '')
+        image_content = processed_data.get('imageContent', [])
         
-        email_data = response.json()
-        body = email_data.get('body', '')
+        if not body and not image_content:
+            return jsonify({'message': 'Could not find text content to summarize'}), 400
         
-        if not body:
-            logger.error(f"No body content found for email ID: {email_id}")
-            return jsonify({'message': 'Could not find text content in this email to summarize'}), 400
-        
-        # Clean HTML tags and prepare for AI summarization
-        import re
         clean_body = re.sub(r'<[^>]*>', '', body)
-        
-        # Advanced business analyst prompt (exactly as in JavaScript)
-        prompt_text = """You are a meticulous business analyst AI. Your task is to analyze the email content I provide and generate a structured summary based on a strict Markdown template. You must follow all instructions and formatting rules precisely.
-
-                Core Instructions:
-
-                Analyze: Carefully read the email provided at the end of this prompt.
-                Extract: Identify the key message, all action items, responsible parties, deadlines, and financial details.
-                Populate: Fill in the provided Markdown Analysis Summary template using only the information from the email.
-                Omit Empty Sections: If an entire numbered section (e.g., ## 3. Financial Impact) has no relevant information in the email, omit the entire section from your output.
-                Handle Missing Subsections: If a specific subsection (e.g., ### Budget) has no relevant information, write N/A for its details.
-                Generate Metadata: For the ## 10. Metadata section, use the current date and time for [DateTime]. Set the [Version] to 1.0 and the [Source] to "User-provided email".
-                Formatting Rules (Strictly Enforce):
-
-                Line Breaks: Add exactly TWO blank lines after each major section heading (##).
-                Line Breaks: Add exactly TWO blank lines after each subsection heading (###).
-                Lists: Use a single hyphen (-) for all list items. Add ONE blank line between items in a list.
-                Checkboxes: Use - [ ] for all items under ### Required Actions and ### Next Steps.
-                Emphasis: Use bold (**...**) for emphasis on people, roles, dates, and key terms.
-                Emojis: You MUST use the specified emojis at the start of each point in the ## 3. Financial Impact section.
-                Indentation: Do not indent any lists.
-
-                Of course. The issue with your original prompt is that it mixes instructions, format specifications, and an example output all together. This can confuse the AI, leading it to produce inconsistent or flawed results.
-
-                A more effective prompt will clearly separate the role, the task, the input, the formatting rules, and the output template. This makes your request unambiguous and guides the AI to the precise output you need.
-
-                Here is a refined, high-quality prompt designed for Gemini.
-
-                Refined Prompt for Gemini
-                Prompt Start:
-
-                You are a meticulous business analyst AI. Your task is to analyze the email content I provide and generate a structured summary based on a strict Markdown template. You must follow all instructions and formatting rules precisely.
-
-                Core Instructions:
-
-                Analyze: Carefully read the email provided at the end of this prompt.
-                Extract: Identify the key message, all action items, responsible parties, deadlines, and financial details.
-                Populate: Fill in the provided Markdown Analysis Summary template using only the information from the email.
-                Omit Empty Sections: If an entire numbered section (e.g., ## 3. Financial Impact) has no relevant information in the email, omit the entire section from your output.
-                Handle Missing Subsections: If a specific subsection (e.g., ### Budget) has no relevant information, write N/A for its details.
-                Generate Metadata: For the ## 10. Metadata section, use the current date and time for [DateTime]. Set the [Version] to 1.0 and the [Source] to "User-provided email".
-                Formatting Rules (Strictly Enforce):
-
-                Line Breaks: Add exactly TWO blank lines after each major section heading (##).
-                Line Breaks: Add exactly TWO blank lines after each subsection heading (###).
-                Lists: Use a single hyphen (-) for all list items. Add ONE blank line between items in a list.
-                Checkboxes: Use - [ ] for all items under ### Required Actions and ### Next Steps.
-                Emphasis: Use bold (**...**) for emphasis on people, roles, dates, and key terms.
-                Emojis: You MUST use the specified emojis at the start of each point in the ## 3. Financial Impact section.
-                Indentation: Do not indent any lists.
-
-                Markdown Analysis Summary Template:
-
-                # Email Analysis Summary
-
-                ## 1. Executive Summary
-
-                ### Key Message
-
-                - [Key message in 1-2 sentences]
-
-
-                ### Action Items/Decisions
-
-                - [High-level action item or decision 1]
-
-                - [High-level action item or decision 2]
-
-
-                ## 2. Action Items
-
-                ### Required Actions
-
-                - [ ] [Action 1]
-
-                - [ ] [Action 2]
-
-
-                ### Next Steps
-
-                - [ ] [Step 1]
-
-                - [ ] [Step 2]
-
-
-                ### Responsibilities
-
-                **[Person/Role]**: 
-                - [Responsibility 1]
-
-                - [Responsibility 2]
-
-
-                ### Deadlines
-
-                **[Date]**: [Description of what is due on this date]
-
-
-                ## 3. Financial Impact
-
-                ### Revenue
-
-                💰 [Details regarding revenue impact, or N/A]
-
-
-                ### Costs
-
-                💸 [Details regarding cost impact, or N/A]
-
-
-                ### Budget
-
-                📊 [Details regarding budget impact, or N/A]
-
-
-                ### Financial Values
-
-                💵 [List specific financial values mentioned, or N/A]
-
-
-                ### Deadlines
-
-                ⏰ [List any finance-related deadlines, or N/A]
-
-
-                ## 10. Metadata
-
-                Generated: [DateTime]
-
-                Version: [Version]
-
-                Source: [Source]"""
-        
-        # Create the full prompt
-        prompt = f"{prompt_text} from the following email content:\n\n---\n{clean_body}"
-        
-        # Create chat history format for Gemini API
-        chat_history = [{"role": "user", "parts": [{"text": prompt}]}]
-        gemini_payload = {"contents": chat_history}
-        
-        logger.info(f"Sending email content to Gemini 2.5 Flash API for summarization")
-        
-        # Call Gemini 2.5 Flash API
-        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
-        
-        gemini_response = requests.post(
-            api_url,
-            headers={'Content-Type': 'application/json'},
-            json=gemini_payload,
-            timeout=60
+        combined_content = clean_body + "\n".join(
+            [f"\n--- IMAGE: {img['imageName']} ---\n{img['extractedText']}" for img in image_content]
         )
+        structured_input = {"emailBody": combined_content}
+        prompt = f"{prompt_text}:\n\n{json.dumps(structured_input, indent=2)}"
+        chat_history = [{"role": "user", "parts": [{"text": prompt}]}]
+
+        # --- Step 2: Call the Gemini API with JSON Mode Enabled ---
         
-        if not gemini_response.ok:
-            error_text = gemini_response.text
-            logger.error(f"Gemini API request failed: {error_text}")
-            return jsonify({'message': 'Failed to generate email summary. Please check your Gemini API configuration.'}), 500
+        # THIS IS THE NEW, CRUCIAL PART. We tell the AI we want JSON back.
+        gemini_payload = {
+            "contents": chat_history,
+            "generationConfig": {
+                "response_mime_type": "application/json"
+            }
+        }
+        
+        logger.info("Sending request to Gemini API with JSON response type.")
+        # api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
+        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+        gemini_response = requests.post(api_url, headers={'Content-Type': 'application/json'}, json=gemini_payload, timeout=60)
+        gemini_response.raise_for_status()
         
         result = gemini_response.json()
         
-        if result.get('candidates') and len(result['candidates']) > 0:
-            raw_summary = result['candidates'][0]['content']['parts'][0]['text']
-            logger.info(f"Raw summary received from Gemini for email: {email_id}")
-            
-            # Clean the markdown response intelligently
-            cleaned_markdown = IntelligentMarkdownProcessor.clean_markdown_response(raw_summary)
-            logger.info(f"Markdown cleaned for email: {email_id}")
-            
-            # Convert to HTML for frontend display
-            html_summary = IntelligentMarkdownProcessor.convert_to_html(cleaned_markdown)
-            logger.info(f"Successfully generated and processed summary for email: {email_id}")
-            
-            return jsonify({
-                'summary': html_summary,
-                'summary_markdown': cleaned_markdown,
-                'summary_raw': raw_summary
-            }), 200
-        else:
-            logger.error("Unexpected response format from Gemini API")
-            return jsonify({'message': 'Unexpected response format from Gemini API'}), 500
+        if not (result.get('candidates') and len(result['candidates']) > 0):
+             return jsonify({'message': 'Invalid response format from Gemini API'}), 500
         
+        # The AI's response is now a guaranteed JSON string
+        raw_json_string = result['candidates'][0]['content']['parts'][0]['text']
+        
+        # --- Step 3: Parse the Guaranteed JSON and Convert to HTML ---
+
+        # We can now use a simple, reliable json.loads(). No more custom parser needed!
+        parsed_dict = json.loads(raw_json_string)
+        logger.info("Successfully parsed guaranteed JSON from AI response.")
+        
+        
+        # Our existing HTML generator will now work perfectly
+        html_payload = generate_html_breakdown(parsed_dict)
+        
+        logger.info(f"Parsed dictionary: {parsed_dict}")
+        # logger.info(f"HTML payload: {html_payload}")
+        return jsonify({
+            'summary_html_breakdown': html_payload['breakdown'],
+            'summary_html_full': html_payload['full_html'],
+            'summary_json': parsed_dict
+        }), 200
+
     except requests.RequestException as e:
-        logger.error(f"Error fetching email content: {str(e)}")
-        return jsonify({'message': 'Failed to fetch email content'}), 500
+        logger.error(f"Error communicating with a service: {str(e)}")
+        return jsonify({'message': 'Error communicating with a service.'}), 500
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse the JSON response from the AI: {str(e)}")
+        return jsonify({'message': 'AI returned invalid JSON.'}), 500
     except Exception as e:
-        logger.error(f"Error summarizing email {email_id} for user {user_id}: {str(e)}")
-        return jsonify({'message': 'Failed to generate email summary'}), 500
+        logger.error(f"An unexpected error occurred in summarize_email: {str(e)}")
+        return jsonify({'message': 'An internal server error occurred.'}), 500
 
 @app.route('/api/ai/generate-content', methods=['POST'])
 @authenticate_jwt
@@ -767,6 +1284,537 @@ def generate_content():
     except Exception as e:
         logger.error(f"Error generating content: {str(e)}")
         return jsonify({'message': 'Failed to generate content'}), 500
+
+@app.route('/api/emails/<email_id>/summarize-json', methods=['POST'])
+@authenticate_jwt
+def summarize_email_json(email_id):
+    """Generate AI-powered summary of email content and return structured JSON"""
+    user_id = request.user.get('id')
+    logger.info(f"Received request to summarize email (JSON format) ID: {email_id} for user: {user_id}")
+    
+    if not GEMINI_API_KEY:
+        logger.error("Gemini API is not configured")
+        return jsonify({'message': 'AI service is not properly configured'}), 500
+    
+    try:
+        # Fetch email content from email service
+        logger.info(f"Fetching email content for ID: {email_id}")
+        headers = {'Authorization': request.headers.get('Authorization')}
+        
+        response = requests.get(
+            f"{EMAIL_SERVICE_URL}/api/emails/{email_id}",
+            headers=headers,
+            timeout=30
+        )
+        
+        if not response.ok:
+            logger.error(f"Failed to fetch email content: {response.status_code} - {response.text}")
+            return jsonify({'message': 'Failed to fetch email content'}), response.status_code
+        
+        email_data = response.json()
+        
+        # Process email with OCR to extract text from images
+        processed_data = process_email_with_images(email_data)
+        
+        body = processed_data.get('emailBody', '')
+        image_content = processed_data.get('imageContent', [])
+        
+        if not body and not image_content:
+            logger.error(f"No content found for email ID: {email_id}")
+            return jsonify({'message': 'Could not find text content in this email to summarize'}), 400
+        
+        # Clean HTML tags and prepare for AI summarization
+        import re
+        clean_body = re.sub(r'<[^>]*>', '', body)
+        
+        # Create structured input for AI as expected by the prompt
+        import json
+        structured_input = {
+            "emailBody": clean_body,
+            "imageContent": image_content,
+            "attachmentContent": []  # TODO: Add attachment processing
+        }
+        
+        # Create the full prompt with structured data - emphasize JSON output
+        json_prompt = f"""
+        {prompt_text}
+        
+        IMPORTANT: You MUST respond with ONLY valid JSON that matches the schema exactly. 
+        Do not include any markdown formatting, explanations, or text outside the JSON.
+        Start your response directly with {{ and end with }}.
+        
+        Email data to analyze:
+        {json.dumps(structured_input, indent=2)}
+        """
+        
+        # Create chat history format for Gemini API
+        chat_history = [{"role": "user", "parts": [{"text": json_prompt}]}]
+        gemini_payload = {"contents": chat_history}
+        
+        logger.info(f"Sending email content to Gemini 2.5 Flash API for JSON summarization")
+        
+        # Call Gemini 2.5 Flash API
+        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+        
+        gemini_response = requests.post(
+            api_url,
+            headers={'Content-Type': 'application/json'},
+            json=gemini_payload,
+            timeout=60
+        )
+        
+        if not gemini_response.ok:
+            error_text = gemini_response.text
+            logger.error(f"Gemini API request failed: {error_text}")
+            return jsonify({'message': 'Failed to generate email summary. Please check your Gemini API configuration.'}), 500
+        
+        result = gemini_response.json()
+        
+        if result.get('candidates') and len(result['candidates']) > 0:
+            raw_summary = result['candidates'][0]['content']['parts'][0]['text']
+            logger.info(f"Raw JSON summary received from Gemini for email: {email_id}")
+            
+            try:
+                # Clean the response - remove any markdown formatting or extra text
+                cleaned_response = raw_summary.strip()
+                
+                # Try to extract JSON from the response
+                json_start = cleaned_response.find('{')
+                json_end = cleaned_response.rfind('}') + 1
+                
+                if json_start >= 0 and json_end > json_start:
+                    json_str = cleaned_response[json_start:json_end]
+                    
+                    try:
+                        parsed_json = json.loads(json_str)
+                        logger.info(f"Successfully parsed JSON response for email: {email_id}")
+                        
+                        # Convert JSON to HTML using our new function
+                        html_summary = convert_json_to_html(parsed_json)
+                        
+                        return jsonify({
+                            'summary': html_summary,
+                            'summary_json': parsed_json,
+                            'summary_raw': raw_summary,
+                            'format': 'json',
+                            'success': True
+                        }), 200
+                        
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Failed to parse JSON response for email {email_id}: {str(e)}")
+                        return jsonify({
+                            'message': 'AI returned invalid JSON format',
+                            'error': str(e),
+                            'raw_response': raw_summary[:500] + '...' if len(raw_summary) > 500 else raw_summary
+                        }), 422
+                
+                else:
+                    logger.error(f"No JSON found in response for email {email_id}")
+                    return jsonify({
+                        'message': 'AI did not return JSON format',
+                        'raw_response': raw_summary[:500] + '...' if len(raw_summary) > 500 else raw_summary
+                    }), 422
+                
+            except Exception as e:
+                logger.error(f"Error processing JSON response for email {email_id}: {str(e)}")
+                return jsonify({
+                    'message': 'Error processing AI response',
+                    'error': str(e)
+                }), 500
+        else:
+            logger.error("Unexpected response format from Gemini API")
+            return jsonify({'message': 'Unexpected response format from Gemini API'}), 500
+        
+    except requests.RequestException as e:
+        logger.error(f"Error fetching email content: {str(e)}")
+        return jsonify({'message': 'Failed to fetch email content'}), 500
+    except Exception as e:
+        logger.error(f"Error summarizing email {email_id} for user {user_id}: {str(e)}")
+        return jsonify({'message': 'Failed to generate email summary'}), 500
+
+@app.route('/api/debug/check-email-images', methods=['POST'])
+@authenticate_jwt
+def debug_check_email_images():
+    """Debug endpoint to check what images are detected in email content"""
+    user_id = request.user.get('id')
+    logger.info(f"Debug: Checking email images for user: {user_id}")
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'message': 'No JSON data provided'}), 400
+        
+        # You can send either email_id or email_data directly
+        email_id = data.get('emailId')
+        email_data = data.get('emailData')
+        
+        if email_id:
+            # Fetch email content from email service
+            headers = {'Authorization': request.headers.get('Authorization')}
+            response = requests.get(
+                f"{EMAIL_SERVICE_URL}/api/emails/{email_id}",
+                headers=headers,
+                timeout=30
+            )
+            
+            if not response.ok:
+                return jsonify({'message': 'Failed to fetch email content'}), response.status_code
+            
+            email_data = response.json()
+        
+        if not email_data:
+            return jsonify({'message': 'No email data provided'}), 400
+        
+        # Process the email to detect images
+        processed_data = process_email_with_images(email_data)
+        
+        # Create detailed debug information
+        debug_info = {
+            'emailBodyLength': len(email_data.get('body', '')),
+            'hasEmailBody': bool(email_data.get('body', '')),
+            'imagesFound': len(processed_data['imageContent']),
+            'imageDetails': processed_data['imageContent'],
+            'hasImages': processed_data['hasImages'],
+            'imageReferences': processed_data['imageReferences'],
+            'imageIndicators': processed_data['imageIndicators'],
+            'attachmentsProvided': len(email_data.get('attachments', [])),
+            'emailBodySample': email_data.get('body', '')[:500] + '...' if len(email_data.get('body', '')) > 500 else email_data.get('body', ''),
+            'metadata': {
+                'processedAt': datetime.now().isoformat(),
+                'userId': user_id
+            }
+        }
+        
+        # Check for specific patterns in email body
+        email_body = email_data.get('body', '')
+        if email_body:
+            # Find all image URLs
+            all_img_urls = re.findall(r'<img[^>]+src="([^"]+)"[^>]*>', email_body, re.IGNORECASE)
+            base64_urls = [url for url in all_img_urls if url.startswith('data:image/')]
+            external_urls = [url for url in all_img_urls if url.startswith(('http:', 'https:'))]
+            other_urls = [url for url in all_img_urls if not url.startswith(('data:', 'http:', 'https:'))]
+            
+            debug_info['patterns'] = {
+                'hasImgTags': '<img' in email_body.lower(),
+                'hasBase64Images': 'data:image/' in email_body,
+                'hasCidReferences': 'cid:' in email_body,
+                'hasAttachmentRefs': 'attachment:' in email_body,
+                'imgTagCount': len(re.findall(r'<img[^>]*>', email_body, re.IGNORECASE)),
+                'totalImageUrls': len(all_img_urls),
+                'base64ImageUrls': len(base64_urls),
+                'externalImageUrls': len(external_urls),
+                'otherImageUrls': len(other_urls),
+                'externalUrls': external_urls[:5],  # Show first 5 URLs for debugging
+                'otherUrls': other_urls[:5]
+            }
+        
+        logger.info(f"Debug: Email image check complete for user {user_id}")
+        return jsonify(debug_info)
+        
+    except Exception as e:
+        logger.error(f"Debug: Error checking email images for user {user_id}: {str(e)}")
+        return jsonify({'message': f'Failed to check email images: {str(e)}'}), 500
+
+@app.route('/api/ocr/process-image', methods=['POST'])
+@authenticate_jwt
+def process_image_ocr():
+    """Extract text from a base64 encoded image"""
+    user_id = request.user.get('id')
+    logger.info(f"Received request to process image with OCR for user: {user_id}")
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'message': 'No JSON data provided'}), 400
+        
+        image_base64 = data.get('imageBase64')
+        image_name = data.get('imageName', 'unknown_image')
+        
+        if not image_base64:
+            return jsonify({'message': 'imageBase64 field is required'}), 400
+        
+        # Process the image with OCR
+        ocr_result = extract_text_from_image_base64(image_base64, image_name)
+        
+        response_data = {
+            'imageName': image_name,
+            'extractedText': ocr_result['text'],
+            'confidence': ocr_result['confidence'],
+            'success': ocr_result['text'] != '',
+            'metadata': {
+                'processedAt': datetime.now().isoformat(),
+                'userId': user_id,
+                'textLength': len(ocr_result['text'])
+            }
+        }
+        
+        if 'error' in ocr_result:
+            response_data['error'] = ocr_result['error']
+        
+        logger.info(f"Successfully processed image OCR for user {user_id}. Text length: {len(ocr_result['text'])}")
+        return jsonify(response_data)
+        
+    except Exception as e:
+        logger.error(f"Error processing image OCR for user {user_id}: {str(e)}")
+        return jsonify({'message': f'Failed to process image OCR: {str(e)}'}), 500
+
+@app.route('/api/ocr/process-url', methods=['POST'])
+@authenticate_jwt
+def process_image_url_ocr():
+    """Extract text from an image URL"""
+    user_id = request.user.get('id')
+    logger.info(f"Received request to process image URL with OCR for user: {user_id}")
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'message': 'No JSON data provided'}), 400
+        
+        image_url = data.get('imageUrl')
+        image_name = data.get('imageName', 'url_image')
+        
+        if not image_url:
+            return jsonify({'message': 'imageUrl field is required'}), 400
+        
+        # Process the image URL with OCR
+        ocr_result = extract_text_from_image_url(image_url, image_name)
+        
+        response_data = {
+            'imageName': image_name,
+            'imageUrl': image_url,
+            'extractedText': ocr_result['text'],
+            'confidence': ocr_result['confidence'],
+            'success': ocr_result['text'] != '',
+            'metadata': {
+                'processedAt': datetime.now().isoformat(),
+                'userId': user_id,
+                'textLength': len(ocr_result['text'])
+            }
+        }
+        
+        if 'error' in ocr_result:
+            response_data['error'] = ocr_result['error']
+        
+        logger.info(f"Successfully processed image URL OCR for user {user_id}. Text length: {len(ocr_result['text'])}")
+        return jsonify(response_data)
+        
+    except Exception as e:
+        logger.error(f"Error processing image URL OCR for user {user_id}: {str(e)}")
+        return jsonify({'message': f'Failed to process image URL OCR: {str(e)}'}), 500
+
+@app.route('/api/test/json-to-html', methods=['POST'])
+@authenticate_jwt
+def test_json_to_html():
+    """Test endpoint to convert JSON to HTML format"""
+    user_id = request.user.get('id')
+    logger.info(f"Test JSON-to-HTML conversion for user: {user_id}")
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'message': 'No JSON data provided'}), 400
+        
+        test_json = data.get('json_data')
+        if not test_json:
+            return jsonify({'message': 'json_data field is required'}), 400
+        
+        # Convert JSON to HTML using our function
+        html_result = convert_json_to_html(test_json)
+        
+        return jsonify({
+            'html_output': html_result,
+            'input_json': test_json,
+            'success': True,
+            'debug_info': {
+                'top_level_keys': list(test_json.keys()) if isinstance(test_json, dict) else 'Not a dict',
+                'executive_summary_keys': list(test_json.get('executiveSummary', {}).keys()) if isinstance(test_json.get('executiveSummary'), dict) else 'Not found or not a dict',
+                'executive_summary_spaced_keys': list(test_json.get('executive Summary', {}).keys()) if isinstance(test_json.get('executive Summary'), dict) else 'Not found or not a dict'
+            },
+            'metadata': {
+                'processedAt': datetime.now().isoformat(),
+                'userId': user_id
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in JSON-to-HTML test for user {user_id}: {str(e)}")
+        return jsonify({'message': f'Failed to convert JSON to HTML: {str(e)}'}), 500
+
+@app.route('/api/test/sample-json-html', methods=['GET'])
+@authenticate_jwt
+def test_sample_json_html():
+    """Test endpoint with a sample JSON to verify HTML conversion"""
+    user_id = request.user.get('id')
+    logger.info(f"Testing sample JSON-to-HTML conversion for user: {user_id}")
+    
+    # Sample JSON matching your schema
+    sample_json = {
+        "executive Summary": {
+            "key Message": "The email promotes Simplilearn's 'Tech Master of Master's Program' as a solution for tech professionals.",
+            "main Action Items": [
+                "Check out the course now",
+                "Enroll in the Tech Master of Master's Program"
+            ],
+            "decisions": ["N/A"]
+        },
+        "action Items": {
+            "tasks": [
+                {
+                    "description": "Explore and consider enrolling in the Tech Master of Master's Program.",
+                    "responsible": "Kuppuram",
+                    "deadline": "N/A",
+                    "status": "N/A"
+                }
+            ],
+            "next Steps": ["Check out the course now"],
+            "required Actions": ["Recipient to explore/enroll in the Simplilearn Tech Master of Master's Program."]
+        },
+        "marketing Impact": {
+            "brand Implications": ["Simplilearn Solutions Pvt. Ltd. is offering a comprehensive Tech Master of Master's Program."],
+            "campaign Effects": ["The email aims to drive enrollment in the 'Tech Master of Master's Program'."],
+            "market Positioning": ["Positions the program as essential for staying ahead."]
+        }
+    }
+    
+    try:
+        # Convert to HTML
+        html_result = convert_json_to_html(sample_json)
+        
+        return jsonify({
+            'html_output': html_result,
+            'sample_json': sample_json,
+            'success': True,
+            'message': 'Sample JSON successfully converted to HTML'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in sample JSON-to-HTML test: {str(e)}")
+        return jsonify({'message': f'Failed to convert sample JSON: {str(e)}'}), 500
+
+@app.route('/api/daily-digest/generate', methods=['POST'])
+@authenticate_jwt
+def generate_daily_digest():
+    """Generate daily digest from consolidated email summaries"""
+    user_id = request.user.get('id')
+    logger.info(f"Received request to generate daily digest for user: {user_id}")
+    
+    if not GEMINI_API_KEY:
+        return jsonify({'message': 'AI service is not properly configured'}), 500
+    
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'message': 'No JSON data provided'}), 400
+        
+        summaries = data.get('summaries', [])
+        target_date = data.get('date', datetime.now().strftime('%Y-%m-%d'))
+        
+        if not summaries:
+            return jsonify({'message': 'No email summaries provided'}), 400
+        
+        logger.info(f"Processing {len(summaries)} email summaries for daily digest on {target_date}")
+        
+        # Create consolidated summary data
+        consolidated_data = {
+            "date": target_date,
+            "totalEmails": len(summaries),
+            "emailSummaries": summaries
+        }
+        
+        # Create prompt for daily digest generation
+        digest_prompt = f"""
+        You are an executive assistant creating a comprehensive daily email digest. 
+        Analyze the following email summaries from {target_date} and create a structured daily digest.
+        
+        Your task is to:
+        1. Provide an executive overview of the day's email activity
+        2. Highlight the most critical action items and decisions needed
+        3. Summarize key financial impacts and business implications
+        4. Identify urgent matters requiring immediate attention
+        5. Group similar topics together for easier consumption
+        6. Create a concise audio script for the digest
+        
+        Please respond with a JSON object following this structure:
+        {{
+            "date": "{target_date}",
+            "executiveSummary": {{
+                "totalEmails": {len(summaries)},
+                "keyHighlights": ["highlight1", "highlight2", "highlight3"],
+                "criticalActions": ["action1", "action2"],
+                "urgentMatters": ["urgent1", "urgent2"]
+            }},
+            "categoryBreakdown": {{
+                "Financial / Bills": {{"count": 0, "keyPoints": []}},
+                "Official/Work": {{"count": 0, "keyPoints": []}},
+                "Transactional": {{"count": 0, "keyPoints": []}},
+                "Security Alert": {{"count": 0, "keyPoints": []}},
+                "Other": {{"count": 0, "keyPoints": []}}
+            }},
+            "actionItems": {{
+                "highPriority": [],
+                "mediumPriority": [],
+                "lowPriority": []
+            }},
+            "financialSummary": {{
+                "totalFinancialEmails": 0,
+                "keyFinancialItems": [],
+                "urgentPayments": []
+            }},
+            "audioScript": "A concise summary suitable for audio playback in under 2 minutes"
+        }}
+        
+        Email summaries to analyze:
+        {json.dumps(consolidated_data, indent=2)}
+        """
+        
+        # Call Gemini API with JSON mode
+        gemini_payload = {
+            "contents": [{"role": "user", "parts": [{"text": digest_prompt}]}],
+            "generationConfig": {
+                "response_mime_type": "application/json"
+            }
+        }
+        
+        logger.info("Sending daily digest request to Gemini API")
+        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+        gemini_response = requests.post(api_url, headers={'Content-Type': 'application/json'}, json=gemini_payload, timeout=60)
+        gemini_response.raise_for_status()
+        
+        result = gemini_response.json()
+        
+        if not (result.get('candidates') and len(result['candidates']) > 0):
+            return jsonify({'message': 'Invalid response format from Gemini API'}), 500
+        
+        # Parse the JSON response
+        daily_digest_json = json.loads(result['candidates'][0]['content']['parts'][0]['text'])
+        
+        # Convert to HTML for display
+        html_digest = generate_html_breakdown(daily_digest_json)
+        
+        logger.info(f"Successfully generated daily digest for user {user_id} on {target_date}")
+        
+        return jsonify({
+            'dailyDigest': {
+                'date': target_date,
+                'digestJson': daily_digest_json,
+                'digestHtml': html_digest['full_html'],
+                'digestBreakdown': html_digest['breakdown'],
+                'audioScript': daily_digest_json.get('audioScript', ''),
+                'totalEmails': len(summaries),
+                'generatedAt': datetime.now().isoformat()
+            },
+            'success': True
+        }), 200
+        
+    except requests.RequestException as e:
+        logger.error(f"Error communicating with Gemini API: {str(e)}")
+        return jsonify({'message': 'Error generating daily digest'}), 500
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse JSON response from AI: {str(e)}")
+        return jsonify({'message': 'AI returned invalid JSON for daily digest'}), 500
+    except Exception as e:
+        logger.error(f"Error generating daily digest for user {user_id}: {str(e)}")
+        return jsonify({'message': 'Failed to generate daily digest'}), 500
 
 @app.errorhandler(404)
 def not_found(error):

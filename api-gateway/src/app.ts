@@ -44,45 +44,68 @@ app.use((req, res, next) => {
 const userServiceProxy = createProxyMiddleware({
     target: `http://localhost:${process.env.USER_SERVICE_PORT || 3002}`,
     changeOrigin: true,
-    onProxyReq: (proxyReq, req, res) => {
-        console.log(`[GW] Proxying to User Service: ${req.method} ${req.originalUrl} -> ${proxyReq.path}`);
-    },
-    onProxyRes: (proxyRes, req, res) => {
-        console.log(`[GW] User Service responded: ${proxyRes.statusCode} for ${req.originalUrl}`);
-    },
-    onError: (err, req, res) => {
-        console.error(`[GW] User Service proxy error for ${req.originalUrl}:`, err.message);
-        res.status(500).json({ message: 'User service unavailable' });
+    on:{
+        proxyReq: (proxyReq, req, res) => {
+            console.log(`[GW] Proxying to User Service: ${req.method} ${req.originalUrl} -> ${proxyReq.path}`);
+        },
+        proxyRes: (proxyRes, req, res) => {
+            console.log(`[GW] User Service responded: ${proxyRes.statusCode} for ${req.originalUrl}`);
+        },
+        error: (err, req, res) => {
+            console.error(`[GW] User Service proxy error for ${req.originalUrl}:`, err.message);
+            res.status(500).json({ message: 'User service unavailable' });
+        }
     }
 });
 
 const emailServiceProxy = createProxyMiddleware({
     target: `http://localhost:${process.env.EMAIL_SERVICE_PORT || 3003}`,
     changeOrigin: true,
-    onProxyReq: (proxyReq, req, res) => {
-        console.log(`[GW] Proxying to Email Service: ${req.method} ${req.originalUrl} -> ${proxyReq.path}`);
-    },
-    onProxyRes: (proxyRes, req, res) => {
-        console.log(`[GW] Email Service responded: ${proxyRes.statusCode} for ${req.originalUrl}`);
-    },
-    onError: (err, req, res) => {
-        console.error(`[GW] Email Service proxy error for ${req.originalUrl}:`, err.message);
-        res.status(500).json({ message: 'Email service unavailable' });
+    on:{
+        proxyReq: (proxyReq, req, res) => {
+            console.log(`[GW] Proxying to Email Service: ${req.method} ${req.originalUrl} -> ${proxyReq.path}`);
+        },
+        proxyRes: (proxyRes, req, res) => {
+            console.log(`[GW] Email Service responded: ${proxyRes.statusCode} for ${req.originalUrl}`);
+        },
+        error: (err, req, res) => {
+            console.error(`[GW] Email Service proxy error for ${req.originalUrl}:`, err.message);
+            res.status(500).json({ message: 'Email service unavailable' });
+        }
     }
 });
 
 const aiServiceProxy = createProxyMiddleware({
     target: `http://localhost:${process.env.AI_SERVICE_PORT || 3004}`,
     changeOrigin: true,
-    onProxyReq: (proxyReq, req, res) => {
-        console.log(`[GW] Proxying to AI Service: ${req.method} ${req.originalUrl} -> ${proxyReq.path}`);
-    },
-    onProxyRes: (proxyRes, req, res) => {
-        console.log(`[GW] AI Service responded: ${proxyRes.statusCode} for ${req.originalUrl}`);
-    },
-    onError: (err, req, res) => {
-        console.error(`[GW] AI Service proxy error for ${req.originalUrl}:`, err.message);
-        res.status(500).json({ message: 'AI service unavailable' });
+    on:{
+        proxyReq: (proxyReq, req, res) => {
+            console.log(`[GW] Proxying to AI Service: ${req.method} ${req.originalUrl} -> ${proxyReq.path}`);
+        },
+        proxyRes: (proxyRes, req, res) => {
+            console.log(`[GW] AI Service responded: ${proxyRes.statusCode} for ${req.originalUrl}`);
+        },
+        error: (err, req, res) => {
+            console.error(`[GW] AI Service proxy error for ${req.originalUrl}:`, err.message);
+            res.status(500).json({ message: 'AI service unavailable' });
+        }
+    }
+});
+
+const msEmailServiceProxy = createProxyMiddleware({
+    target: `http://localhost:${process.env.MS_EMAIL_SERVICE_PORT || 3005}`,
+    changeOrigin: true,
+    on:{
+        proxyReq: (proxyReq, req, res) => {
+            console.log(`[GW] Proxying to MS Email Service: ${req.method} ${req.originalUrl} -> ${proxyReq.path}`);
+        },
+        proxyRes: (proxyRes, req, res) => {
+            console.log(`[GW] MS Email Service responded: ${proxyRes.statusCode} for ${req.originalUrl}`);
+        },
+        error: (err, req, res) => {
+            console.error(`[GW] MS Email Service proxy error for ${req.originalUrl}:`, err.message);
+            res.status(500).json({ message: 'Microsoft email service unavailable' });
+        }
     }
 });
 
@@ -90,12 +113,30 @@ const aiServiceProxy = createProxyMiddleware({
 app.post('/api/auth/signup', userServiceProxy);
 app.post('/api/auth/login', userServiceProxy);
 app.get('/api/auth/status', userServiceProxy);
+
+// User management routes
+app.get('/api/user/onboarding/progress/:correlationId', userServiceProxy);
+app.post('/api/user/onboarding/start', userServiceProxy);
+app.get('/api/user/emails', userServiceProxy);
+
+// Gmail routes
 app.post('/api/auth/google/callback', emailServiceProxy);
 app.get('/api/labels', emailServiceProxy);
 app.get('/api/emails', emailServiceProxy);
 app.get('/api/emails/:emailId', emailServiceProxy);
+
+// Microsoft/O365 routes
+app.get('/api/auth/microsoft/authorize', msEmailServiceProxy);
+app.get('/api/auth/microsoft/callback', msEmailServiceProxy);
+app.post('/api/auth/microsoft/callback', msEmailServiceProxy);
+app.get('/api/ms/folders', msEmailServiceProxy);
+app.get('/api/ms/emails', msEmailServiceProxy);
+app.get('/api/ms/emails/:emailId', msEmailServiceProxy);
+
+// AI routes
 app.post('/api/emails/:emailId/summarize', aiServiceProxy);
 app.post('/api/ai/generate-content', aiServiceProxy);
+app.post('/api/daily-digest/generate', aiServiceProxy);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -117,5 +158,6 @@ app.listen(PORT, () => {
     console.log(`✅ API Gateway running on http://localhost:${PORT}`);
     console.log(`🔗 User Service: http://localhost:${process.env.USER_SERVICE_PORT || 3002}`);
     console.log(`📧 Email Service: http://localhost:${process.env.EMAIL_SERVICE_PORT || 3003}`);
+    console.log(`📧 MS Email Service: http://localhost:${process.env.MS_EMAIL_SERVICE_PORT || 3005}`);
     console.log(`🤖 AI Service: http://localhost:${process.env.AI_SERVICE_PORT || 3004}`);
 }); 

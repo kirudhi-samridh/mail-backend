@@ -1,23 +1,28 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "module": "CommonJS",
+    "module": "commonjs",
     "lib": ["ES2020"],
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": "../",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "declaration": false,
-    "sourceMap": false,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
     "moduleResolution": "node",
-    "incremental": true,
-    "tsBuildInfoFile": "./dist/.tsbuildinfo"
+    "baseUrl": "../",
+    "paths": {
+      "@shared/*": ["shared/*"],
+      "@api-gateway/*": ["api-gateway/src/*"]
+    }
   },
   "include": [
-    "src/**/*"
+    "src/**/*",
+    "../shared/**/*"
   ],
   "exclude": [
     "node_modules",
