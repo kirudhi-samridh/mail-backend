@@ -1,102 +1,70 @@
+import { Worker, Job } from 'bullmq';
+import { getRedisConnection } from '../../redis/connection';
 import fetch from 'node-fetch';
-import { eq } from 'drizzle-orm';
-import { Job } from 'bullmq';
-import { AISummaryJobData } from '../types/onboarding-jobs';
-import { progressBroadcaster } from '../../services/ProgressBroadcaster';
-import { getDb, emails } from '../../db/connection';
+import jwt from 'jsonwebtoken';
+import { io } from '../../../email-sync-proxy-service/src/app';
 
-export class AISummaryProcessor {
-  private db = getDb();
+const queueName = 'email-summarization';
 
-  async process(job: Job<AISummaryJobData>): Promise<void> {
-    const { emailId, userToken, metadata } = job.data;
-    const { correlationId } = metadata;
+const AI_SERVICE_URL = `http://localhost:${process.env.AI_SERVICE_PORT || 3004}`;
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
-    try {
-      // Get email data
-      const [email] = await this.db
-        .select()
-        .from(emails)
-        .where(eq(emails.id, emailId))
-        .limit(1);
+// The processor function that will be called for each job
+const processJob = async (job: Job) => {
+  const { emailId, userId } = job.data;
+  console.log(`[WORKER] Processing job ${job.id} for email ${emailId} and user ${userId}`);
 
-      if (!email) {
-        throw new Error(`Email not found: ${emailId}`);
-      }
+  try {
+    // We need a valid JWT to authenticate with the AI service
+    const token = jwt.sign({ id: userId }, JWT_SECRET, { expiresIn: '5m' });
 
-      // Call AI service for summary
-      const summary = await this.generateSummary(email, userToken);
+    const response = await fetch(`${AI_SERVICE_URL}/api/emails/${emailId}/summarize`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
 
-      // Update email with summary
-      await this.db
-        .update(emails)
-        .set({ 
-          summary,
-          processingStatus: 'completed',
-          updatedAt: new Date()
-        })
-        .where(eq(emails.id, emailId));
-
-      // Update progress - increment by 1 (since we processed 1 email)
-      // Note: We need to track the current progress ourselves since incrementSubTask doesn't exist
-      // For now, we'll use a simple approach and update progress
-      const currentProgress = await progressBroadcaster.getProgress(correlationId);
-      if (currentProgress?.subTasks?.['ai-summary']) {
-        const subTask = currentProgress.subTasks['ai-summary'];
-        const newCompleted = subTask.completed + 1;
-        await progressBroadcaster.updateSubTask(correlationId, 'ai-summary', newCompleted);
-      }
-
-    } catch (error) {
-      // Mark email as failed
-      await this.db
-        .update(emails)
-        .set({ 
-          processingStatus: 'failed',
-          updatedAt: new Date()
-        })
-        .where(eq(emails.id, emailId));
-
-      throw error;
+    if (!response.ok) {
+      const errorData = await response.text();
+      throw new Error(`AI service failed for job ${job.id}: ${response.status} ${errorData}`);
     }
-  }
 
-  private async generateSummary(email: any, userToken?: string): Promise<string> {
-    const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:3004';
+    const result = await response.json();
+    console.log(`[WORKER] Successfully completed job ${job.id} for email ${emailId}.`);
     
-    try {
-      // Use the user's JWT token for authentication
-      if (!userToken) {
-        throw new Error('No user token available for AI service authentication');
-      }
-      
-      const response = await fetch(`${AI_SERVICE_URL}/api/emails/${email.id}/summarize`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${userToken}`,
-        },
-        body: JSON.stringify({
-          subject: email.subject,
-          bodyText: email.bodyText,
-          bodyHtml: email.bodyHtml,
-          fromAddress: email.fromAddress,
-          receivedAt: email.receivedAt,
-          // Include the full email body for AI processing
-          body: email.bodyHtml || email.bodyText || email.snippet
-        })
-      });
+    // Notify frontend via WebSocket that summary for emailId is ready
+    io.to(userId).emit('summary-complete', { 
+      emailId, 
+      summary: result 
+    });
+    console.log(`[WORKER] Emitted 'summary-complete' event to user ${userId} for email ${emailId}`);
 
-      if (!response.ok) {
-        throw new Error(`AI service responded with status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      return result.summary || 'Summary generation failed';
-
-    } catch (error) {
-      console.error('Error generating summary:', error);
-      throw new Error(`Failed to generate summary: ${(error as Error).message}`);
-    }
+    return result;
+  } catch (error: any) {
+    console.error(`[WORKER] Error processing job ${job.id} for email ${emailId}:`, error.message);
+    // The error will be caught by BullMQ and the job will be retried if configured
+    throw error;
   }
-} 
+};
+
+// Create a new worker instance
+export const summaryWorker = new Worker(queueName, processJob, {
+  connection: getRedisConnection(),
+  concurrency: 5, // Process up to 5 jobs concurrently
+  limiter: { // Limit to 100 jobs every 10 seconds to avoid overwhelming the AI service
+    max: 100,
+    duration: 10000,
+  },
+});
+
+summaryWorker.on('completed', (job, result) => {
+  console.log(`[WORKER] Job ${job.id} has completed successfully.`);
+});
+
+summaryWorker.on('failed', (job, err) => {
+  console.error(`[WORKER] Job ${job?.id} has failed with error: ${err.message}`);
+});
+
+console.log('[WORKER] AI Summary Processor worker started.'); 

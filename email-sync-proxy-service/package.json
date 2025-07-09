@@ -18,6 +18,9 @@
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
+    "bullmq": "^5.15.0",
+    "ioredis": "^5.4.1",
+    "socket.io": "^4.7.5",
     "concurrently": "^8.2.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

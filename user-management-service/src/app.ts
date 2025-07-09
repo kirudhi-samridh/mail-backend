@@ -556,6 +556,32 @@ router.get('/api/admin/users', authenticateJWT, async (req: Request, res: Respon
 // ONBOARDING ROUTES
 // ==========================================
 
+// POST /api/user/onboarding/complete
+router.post('/api/user/onboarding/complete', authenticateJWT, async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user?.id;
+
+    if (!userId) {
+        // This should not happen if authenticateJWT middleware is working correctly
+        res.status(401).json({ message: 'User not authenticated' });
+        return;
+    }
+
+    try {
+        console.log(`[USER_SVC] Marking onboarding as complete for user: ${userId}`);
+
+        await db
+            .update(users)
+            .set({ onboardingCompleted: true, updatedAt: new Date() })
+            .where(eq(users.id, userId));
+        
+        res.status(200).json({ message: 'Onboarding marked as complete.' });
+
+    } catch (error: any) {
+        console.error(`[USER_SVC] Error completing onboarding for user ${userId}:`, error);
+        res.status(500).json({ message: 'Failed to update onboarding status.' });
+    }
+});
+
 // POST /api/user/onboarding/start
 router.post('/api/user/onboarding/start', authenticateJWT, async (req: Request, res: Response): Promise<void> => {
     const userId = req.user!.id;

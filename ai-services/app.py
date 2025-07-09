@@ -35,6 +35,7 @@ JWT_SECRET = os.getenv('JWT_SECRET', 'your-secret-key')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 EMAIL_SERVICE_URL = f"http://localhost:{os.getenv('EMAIL_SERVICE_PORT', 3003)}"
 
+
 # ==============================================================================
 #                      RECOMMENDED CODE REPLACEMENT
 # ==============================================================================
@@ -214,6 +215,45 @@ def extract_keys_from_schema(schema_dict: dict) -> set:
 
 schema_as_json_string = json.dumps(SCHEMA_DEFINITION, indent=2)
 
+# STEP 3: Use an f-string to safely inject the perfect JSON string into your prompt.
+# prompt_text = f"""
+# You are a meticulous business analyst AI. 
+# Your task is to analyze the email content and generate a structured summary based on a strict JSON template given below. 
+# You must follow all instructions and formatting rules precisely.
+
+# Core Instructions:
+# Analyze: Carefully read the email provided at the end of this prompt.
+# Extract: Identify the key message, all action items, responsible parties, deadlines, and financial details.
+# Populate: Fill in the provided JSON Analysis Summary template using only the information from the email.
+# Omit Empty Sections: If an entire numbered section  has no relevant information in the email, omit the entire section from your output.
+# Handle Missing Subsections: If a specific subsection  has no relevant information, write N/A for its details.
+
+# *** the JSON template is as follows:
+# {schema_as_json_string}
+# """
+
+# prompt_text = f"""
+# You are a meticulous business analyst AI. 
+# Your task is to analyze the email content and generate a structured summary based on a strict JSON template given below. 
+# You must follow all instructions and formatting rules precisely.
+
+# Core Instructions:
+# Analyze: Carefully read the email provided at the end of this prompt.
+# Extract: Identify the key message, all action items, responsible parties, deadlines, and financial details.
+# Populate: Fill in the provided JSON Analysis Summary template using only the information from the email.
+
+# Classify: Analyze the sender, subject, and overall content to determine the email's primary category from the provided enum. Populate the `classification` object in the JSON output.
+# - `category`: Assign the most fitting category. For example, personal replies are 'Primary Conversation', order confirmations are 'Transactional', sales offers are 'Promotions & Marketing', and internal company memos are 'Official/Work'.
+# - `confidenceScore`: Provide a score from 0.0 to 1.0 indicating your certainty. A high score (e.g., 0.95) means you found very strong, unambiguous evidence. A low score (e.g., 0.6) means the evidence was weak or mixed.
+# - `keywordsFound`: You **must** extract a list of up to 3 specific words or short phrases from the email that justify your category choice. Provide an empty list if none apply.
+
+# Omit Empty Sections: If an entire section has no relevant information in the email, omit the entire section from your output.
+# Handle Missing Subsections: If a specific subsection has no relevant information, write N/A for its details.
+
+# *** the JSON template is as follows:
+# {schema_as_json_string}
+# """
+
 prompt_text = f"""
 You are a meticulous and highly intelligent business analyst AI. Your primary skill is to discern the true commercial intent of an email, looking past misleading marketing tactics.
 Your task is to analyze the email content and generate a structured summary based on a strict JSON template given below. 
@@ -251,6 +291,11 @@ Generate Audio Script: After completing the rest of the JSON, create a concise, 
 *** The JSON template you MUST follow is:
 {schema_as_json_string}
 """
+
+# STEP 4: Dynamically generate the keys directly from the clean Python dictionary.
+# This line no longer needs to parse a string and will not fail.
+ALL_SCHEMA_KEYS = extract_keys_from_schema(SCHEMA_DEFINITION)
+
 
 # Find the start and end of the JSON schema within the prompt string
 json_start = prompt_text.find('{')
@@ -570,6 +615,921 @@ def check_for_image_indicators(email_body):
     
     return indicators
 
+# # Intelligent Markdown Cleaner and HTML Converter
+# class IntelligentMarkdownProcessor:
+    
+#     @staticmethod
+#     def clean_markdown_response(raw_markdown):
+#         """
+#         Comprehensively clean and format markdown response from AI
+#         """
+#         if not raw_markdown or not raw_markdown.strip():
+#             return "No summary available"
+        
+#         processor = IntelligentMarkdownProcessor()
+        
+#         # Step 1: Normalize and pre-process
+#         content = processor._deep_normalize(raw_markdown.strip())
+        
+#         # Step 2: Fix all structural and formatting issues BEFORE markdown conversion
+#         content = processor._comprehensive_fix(content)
+        
+#         # Step 3: Final validation and cleanup
+#         content = processor._final_cleanup(content)
+        
+#         return content
+    
+#     def _deep_normalize(self, content):
+#         """Deep normalization of content"""
+#         # Normalize line endings and whitespace
+#         content = content.replace('\r\n', '\n').replace('\r', '\n')
+        
+#         # Split into lines for processing
+#         lines = content.split('\n')
+#         normalized_lines = []
+        
+#         for line in lines:
+#             # Remove excessive whitespace but preserve intentional indentation
+#             if line.strip():
+#                 # Keep leading whitespace for indented content, clean trailing
+#                 leading_space = len(line) - len(line.lstrip())
+#                 cleaned_content = line.strip()
+#                 normalized_lines.append(' ' * min(leading_space, 4) + cleaned_content)
+#             else:
+#                 normalized_lines.append('')
+        
+#         return '\n'.join(normalized_lines)
+    
+#     def _comprehensive_fix(self, content):
+#         """Fix all issues comprehensively before markdown conversion"""
+#         lines = content.split('\n')
+#         fixed_lines = []
+#         current_section_type = None
+        
+#         for i, line in enumerate(lines):
+#             original_line = line
+#             stripped = line.strip()
+            
+#             if not stripped:
+#                 fixed_lines.append(line)
+#                 continue
+            
+#             # Determine what type of content this is
+#             content_type = self._identify_content_type(stripped)
+            
+#             # Fix based on content type
+#             if content_type == 'title':
+#                 fixed_line = self._fix_title(stripped)
+#                 current_section_type = 'title'
+                
+#             elif content_type == 'section_heading':
+#                 fixed_line = self._fix_section_heading(stripped)
+#                 current_section_type = 'section'
+                
+#             elif content_type == 'subsection_heading':
+#                 fixed_line = self._fix_subsection_heading(stripped)
+#                 current_section_type = 'subsection'
+                
+#             elif content_type == 'checkbox':
+#                 fixed_line = self._fix_checkbox_comprehensive(stripped)
+                
+#             elif content_type == 'list_item':
+#                 fixed_line = self._fix_list_item_comprehensive(stripped)
+                
+#             elif content_type == 'responsibility':
+#                 fixed_line = self._fix_responsibility(stripped)
+                
+#             elif content_type == 'deadline':
+#                 fixed_line = self._fix_deadline(stripped)
+                
+#             elif content_type == 'regular_text':
+#                 fixed_line = self._fix_regular_text(stripped, current_section_type)
+                
+#             else:
+#                 fixed_line = self._fix_text_formatting(stripped)
+            
+#             fixed_lines.append(fixed_line)
+        
+#         return '\n'.join(fixed_lines)
+    
+#     def _identify_content_type(self, line):
+#         """Identify what type of content this line represents"""
+#         if 'Email Analysis Summary' in line:
+#             return 'title'
+#         elif re.match(r'^#{0,6}\s*\d+\.\s+', line):
+#             return 'section_heading'
+#         elif re.match(r'^#{0,6}\s*[A-Za-z][^:]*$', line) and len(line.split()) <= 5:
+#             return 'subsection_heading'
+#         elif re.match(r'^[-*+]?\s*\[\s*[x\s]*\]\s*', line, re.IGNORECASE):
+#             return 'checkbox'
+#         elif re.match(r'^[-*+]\s+', line):
+#             return 'list_item'
+#         elif re.match(r'^\*\*[^*]+\*\*:\s*$', line):
+#             return 'responsibility'
+#         elif re.match(r'^\*\*[^*]+\*\*:\s*.+', line):
+#             return 'deadline'
+#         elif re.match(r'^(Generated|Version|Source):', line):
+#             return 'metadata'
+#         else:
+#             return 'regular_text'
+    
+#     def _fix_title(self, line):
+#         """Fix title formatting"""
+#         return '# Email Analysis Summary'
+    
+#     def _fix_section_heading(self, line):
+#         """Fix section heading formatting"""
+#         # Extract section number and title
+#         match = re.match(r'^#{0,6}\s*(\d+)\.\s*(.+)', line)
+#         if match:
+#             num, title = match.groups()
+#             return f'## {num}. {title.strip()}'
+#         return f'## {line.strip()}'
+    
+#     def _fix_subsection_heading(self, line):
+#         """Fix subsection heading formatting"""
+#         clean_title = re.sub(r'^#{0,6}\s*', '', line).strip()
+#         return f'### {clean_title}'
+    
+#     def _fix_checkbox_comprehensive(self, line):
+#         """Comprehensively fix checkbox formatting"""
+#         # Remove any existing list markers and checkbox brackets
+#         content = re.sub(r'^[-*+]?\s*\[\s*[x\s]*\]\s*', '', line, flags=re.IGNORECASE)
+        
+#         # Determine if it should be checked
+#         is_checked = bool(re.search(r'\[x\]', line, re.IGNORECASE))
+        
+#         # Return proper checkbox format
+#         checkbox_marker = '- [x]' if is_checked else '- [ ]'
+#         return f'{checkbox_marker} {content.strip()}'
+    
+#     def _fix_list_item_comprehensive(self, line):
+#         """Comprehensively fix list item formatting"""
+#         # Extract content after any list marker
+#         content = re.sub(r'^[-*+]\s*', '', line).strip()
+        
+#         # Handle malformed items like "-Word" -> "- Word"
+#         content = re.sub(r'^([A-Z])', r'\1', content)
+        
+#         return f'- {content}'
+    
+#     def _fix_responsibility(self, line):
+#         """Fix responsibility formatting"""
+#         match = re.match(r'^\*\*([^*]+)\*\*:\s*$', line)
+#         if match:
+#             return f'**{match.group(1).strip()}:**'
+#         return line
+    
+#     def _fix_deadline(self, line):
+#         """Fix deadline formatting"""
+#         match = re.match(r'^\*\*([^*]+)\*\*:\s*(.+)', line)
+#         if match:
+#             date_part, desc_part = match.groups()
+#             return f'**{date_part.strip()}:** {desc_part.strip()}'
+#         return line
+    
+#     def _fix_regular_text(self, line, section_type):
+#         """Fix regular text with context awareness"""
+#         # Apply text formatting fixes
+#         fixed = self._fix_text_formatting(line)
+        
+#         # Context-aware fixes - convert plain text to lists in certain sections
+#         if section_type in ['subsection'] and len(fixed) > 15 and not fixed.startswith(('**', '-', '*', '+')):
+#             # This might be content that should be a list item
+#             if not re.match(r'^(Generated|Version|Source):', fixed):
+#                 return f'- {fixed}'
+        
+#         return fixed
+    
+#     def _fix_text_formatting(self, line):
+#         """Fix text formatting issues comprehensively"""
+#         # Fix bold text first
+#         line = re.sub(r'\*\*\s*([^*]+?)\s*\*\*', r'**\1**', line)
+        
+#         # Fix spacing around bold text - handle all cases
+#         # Case 1: word**bold**word -> word **bold** word
+#         line = re.sub(r'(\w)\*\*([^*]+?)\*\*(\w)', r'\1 **\2** \3', line)
+        
+#         # Case 2: **bold**word -> **bold** word  
+#         line = re.sub(r'\*\*([^*]+?)\*\*([a-zA-Z])', r'**\1** \2', line)
+        
+#         # Case 3: word**bold** -> word **bold**
+#         line = re.sub(r'([a-zA-Z])\*\*([^*]+?)\*\*', r'\1 **\2**', line)
+        
+#         # Fix spacing with punctuation - CRITICAL FIX
+#         # **bold** 's -> **bold**'s (remove space before apostrophe)
+#         line = re.sub(r'\*\*([^*]+?)\*\*\s+([\'\.,;:!?])', r'**\1**\2', line)
+        
+#         # Fix word concatenation
+#         line = re.sub(r'([a-z])([A-Z][a-z])', r'\1 \2', line)
+        
+#         # Fix specific concatenation patterns
+#         line = re.sub(r'(\w)(and|or|on|in|at|to|for|with|by)([A-Z])', r'\1 \2 \3', line)
+        
+#         # Fix emoji spacing
+#         line = re.sub(r'([💰💸📊💵⏰])\s*([^\s\n])', r'\1 \2', line)
+        
+#         return line
+    
+#     def _final_cleanup(self, content):
+#         """Final cleanup and optimization"""
+#         lines = content.split('\n')
+#         cleaned_lines = []
+#         prev_was_empty = False
+        
+#         for line in lines:
+#             is_empty = not line.strip()
+            
+#             # Prevent more than one consecutive empty line
+#             if is_empty and prev_was_empty:
+#                 continue
+                
+#             cleaned_lines.append(line)
+#             prev_was_empty = is_empty
+        
+#         # Remove leading and trailing empty lines
+#         while cleaned_lines and not cleaned_lines[0].strip():
+#             cleaned_lines.pop(0)
+#         while cleaned_lines and not cleaned_lines[-1].strip():
+#             cleaned_lines.pop()
+        
+#         return '\n'.join(cleaned_lines)
+    
+#     @staticmethod
+#     def convert_to_html(cleaned_markdown):
+#         """Convert cleaned markdown to HTML with post-processing fixes"""
+        
+#         if not cleaned_markdown or not cleaned_markdown.strip():
+#             return "<p>No summary available</p>"
+        
+#         # Convert markdown to HTML
+#         md = markdown.Markdown(extensions=[
+#             'markdown.extensions.extra',
+#             'markdown.extensions.codehilite'
+#         ])
+        
+#         html_content = md.convert(cleaned_markdown)
+        
+#         # Apply comprehensive post-processing
+#         processor = IntelligentMarkdownProcessor()
+#         html_content = processor._post_process_html(html_content)
+        
+#         return html_content
+    
+#     def _post_process_html(self, html_content):
+#         """Comprehensive HTML post-processing"""
+        
+#         # First, fix any issues the markdown converter created
+#         html_content = self._fix_markdown_converter_issues(html_content)
+        
+#         # Then apply styling and enhancements
+#         html_content = self._apply_comprehensive_styling(html_content)
+        
+#         return html_content
+    
+#     def _fix_markdown_converter_issues(self, html_content):
+#         """Fix issues created by the markdown converter"""
+        
+#         # Fix checkboxes that got converted incorrectly - handle ALL variations
+#         # Pattern 1: <li>- [ ] content</li> -> proper checkbox
+#         html_content = re.sub(
+#             r'<li>-\s*\[\s*\]\s*([^<]+)</li>',
+#             r'<li class="checkbox-item"><input type="checkbox" disabled> <span>\1</span></li>',
+#             html_content
+#         )
+        
+#         # Pattern 2: <li>- [x] content</li> -> checked checkbox
+#         html_content = re.sub(
+#             r'<li>-\s*\[x\]\s*([^<]+)</li>',
+#             r'<li class="checkbox-item"><input type="checkbox" checked disabled> <span>\1</span></li>',
+#             html_content,
+#             flags=re.IGNORECASE
+#         )
+        
+#         # Pattern 3: <li>[ ] content</li> -> proper checkbox (without dash)
+#         html_content = re.sub(
+#             r'<li>\[\s*\]\s*([^<]+)</li>',
+#             r'<li class="checkbox-item"><input type="checkbox" disabled> <span>\1</span></li>',
+#             html_content
+#         )
+        
+#         # Pattern 4: <li>[x] content</li> -> checked checkbox (without dash)
+#         html_content = re.sub(
+#             r'<li>\[x\]\s*([^<]+)</li>',
+#             r'<li class="checkbox-item"><input type="checkbox" checked disabled> <span>\1</span></li>',
+#             html_content,
+#             flags=re.IGNORECASE
+#         )
+        
+#         # Fix checkbox patterns in paragraphs
+#         html_content = re.sub(
+#             r'<p>-?\s*\[\s*\]\s*([^<]+)</p>',
+#             r'<div class="checkbox-item"><input type="checkbox" disabled> <span>\1</span></div>',
+#             html_content
+#         )
+        
+#         html_content = re.sub(
+#             r'<p>-?\s*\[x\]\s*([^<]+)</p>',
+#             r'<div class="checkbox-item"><input type="checkbox" checked disabled> <span>\1</span></div>',
+#             html_content,
+#             flags=re.IGNORECASE
+#         )
+        
+#         # Fix plain text checkboxes that appear as text
+#         html_content = re.sub(
+#             r'(\[\s*\])\s*([^<\n]+)',
+#             r'<input type="checkbox" disabled style="margin-right: 0.5em;"> <span>\2</span>',
+#             html_content
+#         )
+        
+#         html_content = re.sub(
+#             r'(\[x\])\s*([^<\n]+)',
+#             r'<input type="checkbox" checked disabled style="margin-right: 0.5em;"> <span>\2</span>',
+#             html_content,
+#             flags=re.IGNORECASE
+#         )
+        
+#         return html_content
+    
+#     def _apply_comprehensive_styling(self, html_content):
+#         """Apply comprehensive styling to HTML"""
+        
+#         # Define all styles upfront
+#         styles = {
+#             'container': 'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 100%; padding: 1.5em; background: #fff;',
+#             'h1': 'font-size: 2.2em; font-weight: bold; margin: 0 0 1.5em 0; color: #1a365d; border-bottom: 3px solid #3182ce; padding-bottom: 0.5em;',
+#             'h2': 'font-size: 1.6em; font-weight: bold; margin: 2.5em 0 1em 0; color: #2d3748; border-bottom: 2px solid #4299e1; padding-bottom: 0.3em;',
+#             'h3': 'font-size: 1.3em; font-weight: 600; margin: 1.8em 0 0.8em 0; color: #4a5568;',
+#             'ul': 'margin: 1em 0; padding-left: 1.5em; list-style-type: disc;',
+#             'li': 'margin: 0.4em 0; line-height: 1.5;',
+#             'checkbox_li': 'list-style: none; margin: 0.6em 0; position: relative; padding-left: 0; display: flex; align-items: flex-start;',
+#             'checkbox_input': 'margin-right: 0.5em; margin-top: 0.1em; transform: scale(1.1); flex-shrink: 0;',
+#             'responsibility': 'font-weight: 600; margin: 1.5em 0 0.8em 0; color: #2d3748; font-size: 1.1em; background: #f7fafc; padding: 0.5em; border-radius: 4px; border-left: 3px solid #4299e1;',
+#             'deadline': 'margin: 0.8em 0; padding: 0.8em; background: linear-gradient(135deg, #fff5f5, #ffe8e8); border-left: 4px solid #e53e3e; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);',
+#             'deadline_date': 'font-weight: bold; color: #c53030; font-size: 1.05em;',
+#             'financial': 'margin: 0.5em 0; padding: 0.6em; background: #f7fafc; border-radius: 6px; border-left: 3px solid #38b2ac;',
+#             'emoji': 'margin-right: 0.6em; font-size: 1.2em;'
+#         }
+        
+#         # Apply heading styles with clear hierarchy
+#         html_content = re.sub(r'<h1>', f'<h1 style="{styles["h1"]}">', html_content)
+#         html_content = re.sub(r'<h2>', f'<h2 style="{styles["h2"]}">', html_content)
+#         html_content = re.sub(r'<h3>', f'<h3 style="{styles["h3"]}">', html_content)
+        
+#         # Apply list styles
+#         html_content = re.sub(r'<ul>', f'<ul style="{styles["ul"]}">', html_content)
+        
+#         # Style regular list items
+#         html_content = re.sub(r'<li>(?!<)', f'<li style="{styles["li"]}">', html_content)
+        
+#         # Style checkbox items specifically
+#         html_content = re.sub(
+#             r'<li class="checkbox-item">',
+#             f'<li class="checkbox-item" style="{styles["checkbox_li"]}">',
+#             html_content
+#         )
+        
+#         # Style checkbox inputs
+#         html_content = re.sub(
+#             r'<input type="checkbox"([^>]*)>',
+#             f'<input type="checkbox"\\1 style="{styles["checkbox_input"]}">',
+#             html_content
+#         )
+        
+#         # Handle financial items with emojis
+#         for emoji in ['💰', '💸', '📊', '💵', '⏰']:
+#             html_content = re.sub(
+#                 f'<li[^>]*>\\s*{re.escape(emoji)}\\s*([^<]+)</li>',
+#                 f'<li style="{styles["financial"]}"><span style="{styles["emoji"]}">{emoji}</span><span>\\1</span></li>',
+#                 html_content
+#             )
+        
+#         # Handle responsibility sections
+#         html_content = re.sub(
+#             r'<p><strong>([^<]+?):</strong></p>',
+#             f'<div style="{styles["responsibility"]}">\\1:</div>',
+#             html_content
+#         )
+        
+#         # Handle responsibility sections that might be in different formats
+#         html_content = re.sub(
+#             r'<p><strong>([^<]+?)</strong>:\s*</p>',
+#             f'<div style="{styles["responsibility"]}">\\1:</div>',
+#             html_content
+#         )
+        
+#         # Handle inline responsibility format
+#         html_content = re.sub(
+#             r'<p><strong>([^<]+?):</strong>\s*([^<]+?)</p>',
+#             f'<div style="{styles["responsibility"]}">\\1:</div><p style="margin: 0.5em 0;">\\2</p>',
+#             html_content
+#         )
+        
+#         # Handle deadline formatting - make sure it doesn't conflict with responsibility
+#         html_content = re.sub(
+#             r'<p><strong>([^<]*?(?:PM|AM|UTC)[^<]*?):</strong>\s*([^<]+?)</p>',
+#             f'<div style="{styles["deadline"]}"><span style="{styles["deadline_date"]}">\\1:</span> <span>\\2</span></div>',
+#             html_content
+#         )
+        
+#         # Wrap in styled container
+#         html_content = f'<div style="{styles["container"]}">{html_content}</div>'
+        
+#         return html_content
+
+   
+
+
+def convert_dict_to_html(data_dict: dict) -> str:
+    """
+    Converts the parsed dictionary into a well-formatted and styled HTML block.
+    Handles empty or null content gracefully.
+    **NEW: Filters out schema keys and formats titles.**
+    """
+    if not data_dict or not isinstance(data_dict, dict):
+        return "<p>No summary data available to display.</p>"
+
+    html_parts = ['<div class="summary-container">']
+
+    # --- HELPER FUNCTIONS ---
+    def format_title(key_str: str) -> str:
+        """Converts camelCase or snake_case to Title Case. e.g. executiveSummary -> Executive Summary"""
+        return re.sub(r'(?<!^)(?=[A-Z])', ' ', key_str).replace('_', ' ').title()
+
+    def render_list_of_dicts(items):
+        if isinstance(items, dict):
+            items = [items]
+        if not isinstance(items, list):
+            return f"<p>{items}</p>"
+
+        item_html = '<ul class="item-list">'
+        for item in items:
+            if isinstance(item, dict):
+                item_html += '<li class="item-card">'
+                for k, v in item.items():
+                    key_title = format_title(k)
+                    item_html += f'<div><strong>{key_title}:</strong> '
+                    if isinstance(v, list):
+                        item_html += "<ul>" + "".join(f"<li>{val}</li>" for val in v) + "</ul>"
+                    else:
+                        item_html += str(v)
+                    item_html += '</div>'
+                item_html += '</li>'
+            else:
+                item_html += f'<li>{item}</li>'
+        item_html += '</ul>'
+        return item_html
+
+    # --- MAIN LOGIC ---
+    # Define the schema keys to ignore
+    SCHEMA_KEYS_TO_IGNORE = {'$schema', 'type', 'properties', 'required', 'items', 'format', 'enum'}
+
+    # Filter out the schema keys at the top level of the dictionary
+    data_to_render = {k: v for k, v in data_dict.items() if k not in SCHEMA_KEYS_TO_IGNORE}
+    
+    # If filtering leaves nothing, it was probably just a schema
+    if not data_to_render:
+        return "<p><em>No actionable summary could be generated from this email.</em></p>"
+
+    for major_key, minor_data in data_to_render.items():
+        html_parts.append(f'<h4>{format_title(major_key)}</h4>')
+
+        if isinstance(minor_data, dict):
+            # Also filter schema keys from nested objects
+            filtered_minor_data = {k: v for k, v in minor_data.items() if k not in SCHEMA_KEYS_TO_IGNORE}
+            for minor_key, content in filtered_minor_data.items():
+                html_parts.append(f'<h5>{format_title(minor_key)}</h5>')
+                if not content and not isinstance(content, bool):
+                    html_parts.append('<p><em>N/A</em></p>')
+                elif isinstance(content, list):
+                    html_parts.append(render_list_of_dicts(content))
+                else:
+                    html_parts.append(f'<p>{str(content)}</p>')
+        elif isinstance(minor_data, list):
+            if not minor_data:
+                html_parts.append('<p><em>N/A</em></p>')
+            else:
+                html_parts.append(render_list_of_dicts(minor_data))
+        else:
+             html_parts.append(f'<p>{str(minor_data)}</p>')
+
+
+    html_parts.append('</div>')
+    
+    # Prepend the existing CSS styles string
+    css_styles = """<style> ... </style>""" # (Your full CSS string here)
+    return css_styles + "".join(html_parts)
+
+
+# In your Python script (e.g., app.py)
+# This is the FINAL and DEFINITIVE version of the parser.
+
+import re
+
+# In your Python script (e.g., app.py)
+# This is the FINAL and DEFINITIVE version of the parser.
+
+import re
+from collections import defaultdict
+
+# def parse_summary_to_dict(text_summary: str, **kwargs) -> dict:
+#     """
+#     A definitive, resilient parser. It first groups all lines by indentation,
+#     then explicitly finds and restructures classification data and other special
+#     sections like tasks into their correct nested format.
+#     """
+#     lines = [line for line in text_summary.strip().split('\n') if line.strip()]
+#     if not lines:
+#         return {}
+
+#     # Step 1: A simple first pass to group lines under their parent headers based on indentation
+#     # This creates a dictionary where values are lists of strings.
+#     raw_groups = defaultdict(list)
+#     path = []
+#     indent_levels = {}
+
+#     for line in lines:
+#         indent = len(line) - len(line.lstrip(' '))
+        
+#         while path and indent <= indent_levels.get(path[-1], -1):
+#             path.pop()
+
+#         parent_key = path[-1] if path else None
+        
+#         if parent_key:
+#             raw_groups[parent_key].append(line.strip())
+#         else:
+#             # This is a top-level key
+#             key = line.strip()
+#             path.append(key)
+#             indent_levels[key] = indent
+#             raw_groups[key] = [] # Initialize its list
+
+#     # Step 2: Post-process the raw groups into the final, structured dictionary
+#     final_dict = {}
+#     classification_data = {}
+#     CLASSIFICATION_KEYS = {'category', 'confidence score', 'keywords found'}
+
+#     for key, values in raw_groups.items():
+#         normalized_key = key.lower().replace(" ", "")
+
+#         # Find and pull out all classification data into a separate object
+#         if normalized_key in CLASSIFICATION_KEYS:
+#             classification_data[normalized_key] = "\n".join(values)
+#             continue # Skip adding it to the main dict for now
+
+#         # Handle other sections
+#         section_content = {}
+#         if not values:
+#             final_dict[key] = {}
+#             continue
+
+#         # Special handling for 'tasks' which use the 'Key: Value' format
+#         if key == 'tasks':
+#             tasks_list = []
+#             current_task = {}
+#             for v_line in values:
+#                 match = re.match(r'([A-Za-z]+):\s*(.*)', v_line)
+#                 if match:
+#                     t_key, t_val = match.groups()
+#                     if t_key.lower() == 'description' and current_task:
+#                         tasks_list.append(current_task)
+#                         current_task = {}
+#                     current_task[t_key.lower()] = t_val
+#             if current_task:
+#                 tasks_list.append(current_task)
+#             section_content = tasks_list
+#         else:
+#             # Handle sections with simple sub-keys or lists of strings
+#             sub_key = None
+#             buffer = []
+#             for v_line in values + ['']: # Add sentinel for flushing
+#                 # Check if line is a sub-key (single or two words, camelCase or Title Case)
+#                 if len(v_line.split()) <= 2 and re.match(r'^[a-zA-Z][a-zA-Z]*$', v_line.replace(" ", "")):
+#                     if sub_key and buffer:
+#                         section_content[sub_key] = "\n".join(buffer)
+#                     sub_key = v_line
+#                     buffer = []
+#                 else:
+#                     if v_line:
+#                         buffer.append(v_line)
+#             if sub_key and buffer:
+#                 section_content[sub_key] = "\n".join(buffer)
+
+#         # If a section only has one value, don't nest it
+#         if not section_content and len(values) == 1:
+#             final_dict[key] = values[0]
+#         elif not section_content and len(values) > 1:
+#              final_dict[key] = values
+#         else:
+#             final_dict[key] = section_content
+            
+#     # Step 3: Add the properly nested classification object to the final dictionary
+#     if classification_data:
+#         final_dict['classification'] = {
+#             'category': classification_data.get('category'),
+#             'confidenceScore': float(classification_data.get('confidence score', 0.0)),
+#             'keywordsFound': classification_data.get('keywords found', '').split('\n')
+#         }
+
+#     return final_dict
+
+
+# def parse_summary_to_dict(text_summary: str, **kwargs) -> dict:
+#     """
+#     A definitive, resilient parser that uses indentation and pattern matching
+#     to build a nested dictionary. It specifically finds and groups all
+#     classification-related data into a nested 'classification' object.
+#     """
+#     lines = text_summary.strip().split('\n')
+#     parsed_data = {}
+    
+#     # Use a stack to keep track of the current nesting level
+#     # Format: (indent_level, dictionary_pointer)
+#     stack = [(-1, parsed_data)]
+    
+#     # --- Special logic to gather all classification details ---
+#     classification_details = {}
+#     CLASSIFICATION_KEYS = {'category', 'confidence score', 'keywords found'}
+
+#     for line in lines:
+#         stripped_line = line.strip()
+#         if not stripped_line:
+#             continue
+
+#         indent_level = len(line) - len(line.lstrip(' '))
+        
+#         # Check for our special 'Key: Value' format (e.g., for tasks)
+#         record_match = re.match(r'([A-Za-z\s]+):\s*(.*)', stripped_line)
+
+#         # Find the correct parent in the hierarchy for the current line
+#         while indent_level <= stack[-1][0]:
+#             stack.pop()
+#         parent_dict = stack[-1][1]
+
+#         # Determine if the current line is a key or a value
+#         is_key = True
+#         last_key_in_parent = list(parent_dict.keys())[-1] if parent_dict else None
+
+#         if last_key_in_parent and parent_dict.get(last_key_in_parent) is None:
+#             # This line is the value for the previous key
+#             parent_dict[last_key_in_parent] = stripped_line
+#             is_key = False
+        
+#         if is_key:
+#             # This line is a new key.
+#             key = stripped_line
+#             # Normalize the key for checking (lowercase, no spaces)
+#             normalized_key = key.lower().replace(" ", "")
+
+#             # --- THIS IS THE NEW LOGIC ---
+#             # If it's a classification key, add it to our special dictionary
+#             if normalized_key in CLASSIFICATION_KEYS:
+#                 # Value will be assigned on the next iteration if it's on a new line
+#                 classification_details[normalized_key] = None
+#                 stack.append((indent_level, classification_details)) # Temporarily point to this dict
+#             # Handle 'Key: Value' for tasks
+#             elif record_match:
+#                 key, value = record_match.groups()
+#                 # This logic assumes tasks are under an 'actionItems' key
+#                 if 'actionItems' not in parent_dict:
+#                     parent_dict['actionItems'] = {}
+#                 if 'tasks' not in parent_dict['actionItems']:
+#                     parent_dict['actionItems']['tasks'] = []
+                
+#                 # Group consecutive Key:Value pairs into a single task object
+#                 if key.lower() == 'description' or not parent_dict['actionItems']['tasks']:
+#                      parent_dict['actionItems']['tasks'].append({}) # Start a new task
+                
+#                 # Add the key-value pair to the last task object
+#                 parent_dict['actionItems']['tasks'][-1][key.lower()] = value
+#             else:
+#                 # It's a regular key
+#                 parent_dict[key] = None
+#                 # Create a new dictionary for this key and push it to the stack
+#                 # for potential children.
+#                 new_dict_for_key = {}
+#                 parent_dict[key] = new_dict_for_key
+#                 stack.append((indent_level, new_dict_for_key))
+
+#     # After parsing all lines, if we collected any classification details,
+#     # add them to the main parsed_data dictionary in the correct nested structure.
+#     if classification_details:
+#         # Clean up the None values from the classification details
+#         final_classification = {}
+#         if classification_details.get('category'):
+#             final_classification['category'] = classification_details['category']
+#         if classification_details.get('confidence score'):
+#             # Convert score to number if possible
+#             try:
+#                 final_classification['confidenceScore'] = float(re.sub(r'[^\d.]', '', classification_details['confidence score']))
+#             except (ValueError, TypeError):
+#                  final_classification['confidenceScore'] = 0.0
+#         if classification_details.get('keywords found'):
+#             # Split keywords into a list
+#             final_classification['keywordsFound'] = [kw.strip() for kw in classification_details['keywords found'].split('\n')]
+
+#         parsed_data['classification'] = final_classification
+        
+#         # Remove the now-empty placeholder keys from the main dict
+#         keys_to_delete = [k for k in parsed_data if k.lower().replace(" ", "") in CLASSIFICATION_KEYS]
+#         for k in keys_to_delete:
+#             del parsed_data[k]
+            
+#     return parsed_data
+
+
+# def parse_summary_to_dict(text_summary: str, **kwargs) -> dict: # removed unused known_keys
+#     """
+#     A robust parser that builds a nested dictionary based on line indentation,
+#     which is the most consistent structural clue from the AI's text output.
+#     It also handles special 'Key: Value' formats for records like tasks.
+#     """
+#     lines = text_summary.strip().split('\n')
+#     parsed_data = {}
+    
+#     # stack will hold pointers to the dictionaries at each indentation level
+#     # Format: (indent_level, dictionary_pointer)
+#     stack = [(-1, parsed_data)]
+    
+#     # --- Special handling for structured records (like 'tasks') ---
+#     current_record_list_key = None
+#     current_record = {}
+#     record_start_keys = {'description', 'name', 'date'}
+
+#     def flush_record():
+#         """Saves any pending structured record (like a task)."""
+#         nonlocal current_record
+#         if current_record and current_record_list_key:
+#             # The parent dict for the record list is the last one on the stack
+#             parent_dict = stack[-1][1]
+#             if current_record_list_key not in parent_dict:
+#                 parent_dict[current_record_list_key] = []
+#             parent_dict[current_record_list_key].append(current_record)
+#             current_record = {}
+
+#     for line in lines:
+#         stripped_line = line.strip()
+#         if not stripped_line:
+#             continue
+            
+#         indent_level = len(line) - len(line.lstrip(' '))
+
+#         # --- Logic for structured 'Key: Value' lines (e.g., within 'tasks') ---
+#         match = re.match(r'([A-Za-z\s]+):\s*(.*)', stripped_line)
+#         if match:
+#             key, value = match.groups()
+#             key_clean = key.lower().strip()
+
+#             if key_clean in record_start_keys and current_record:
+#                 flush_record()
+
+#             # The current key for the record list is the last key added to the parent
+#             # Get the parent dictionary from the stack
+#             parent_dict = stack[-1][1]
+#             # Find the last key added to that parent
+#             if parent_dict:
+#                  current_record_list_key = list(parent_dict.keys())[-1]
+            
+#             current_record[key_clean] = value.strip()
+#             continue
+
+#         # If we encounter a line that is NOT a 'Key: Value' pair,
+#         # we must flush any pending record we were building.
+#         flush_record()
+#         current_record_list_key = None
+        
+#         # --- Main Indentation Logic ---
+#         # Find the correct parent in the hierarchy by popping from the stack
+#         while indent_level <= stack[-1][0]:
+#             stack.pop()
+        
+#         parent_dict = stack[-1][1]
+
+#         # Check if the stripped line is a key for a new dictionary or a simple value.
+#         # If the parent dictionary's last key has a `None` value, this line is its value.
+#         last_key_in_parent = list(parent_dict.keys())[-1] if parent_dict else None
+        
+#         if last_key_in_parent and parent_dict[last_key_in_parent] is None:
+#              # This line is a value for the previous key
+#              parent_dict[last_key_in_parent] = stripped_line
+#         else:
+#              # This line is a new key. Assign `None` as a placeholder for its value.
+#              # If a more indented line follows, this will be replaced by a new dictionary.
+#              # If not, the next line at the same/lesser indent will become its value.
+#             if stripped_line in parent_dict: # Handle lists of items like in mainActionItems
+#                 if not isinstance(parent_dict[stripped_line], list):
+#                     parent_dict[stripped_line] = [parent_dict[stripped_line]]
+#                 parent_dict[stripped_line].append(None) # Add placeholder for next value
+#             else:
+#                 parent_dict[stripped_line] = None
+#                 # Push the new dictionary context onto the stack for potential children
+#                 stack.append((indent_level, parent_dict))
+
+#     # After the loop, do one final flush for any pending record
+#     flush_record()
+    
+#     # --- Final Cleanup Pass ---
+#     # This recursive function cleans up the dictionary structure.
+#     def cleanup_final_dict(d):
+#         if not isinstance(d, dict):
+#             return d
+        
+#         cleaned_dict = {}
+#         key_list = list(d.keys())
+        
+#         for i, key in enumerate(key_list):
+#             value = d[key]
+            
+#             # This logic handles the key-on-one-line, value-on-the-next format
+#             if isinstance(value, dict) and not value: # It's an empty dict placeholder
+#                 # Check if the next key at this level looks like a value
+#                 if i + 1 < len(key_list):
+#                     next_key = key_list[i+1]
+#                     # If the next "key" doesn't have children, it's actually the value for the current key
+#                     if isinstance(d[next_key], dict) and not d[next_key]:
+#                          cleaned_dict[key] = next_key
+#                          continue
+            
+#             # If a key has a None value, it means no content was found for it.
+#             if value is None:
+#                 cleaned_dict[key] = "N/A"
+#             # If it's a dictionary, recursively clean it
+#             elif isinstance(value, dict):
+#                 cleaned_dict[key] = cleanup_final_dict(value)
+#             # Otherwise, just assign the value
+#             else:
+#                  cleaned_dict[key] = value
+
+#         return cleaned_dict
+
+#     # The cleanup logic is complex. Let's try to return the raw parsed data first.
+#     # The primary parsing loop should be sufficient if the HTML converter is robust.
+#     # The convert_dict_to_html function is designed to handle this structure.
+#     return parsed_data
+
+
+# def convert_dict_to_html(data_dict: dict) -> str:
+#     """
+#     Converts the parsed dictionary into clean, semantic, UNSYTYLED HTML.
+#     Styling will be handled by a separate CSS file in the frontend.
+#     """
+#     if not data_dict or not isinstance(data_dict, dict):
+#         return "<p>No summary data available to display.</p>"
+
+#     # The main container now only has a class name for frontend CSS to target
+#     html_parts = ['<div class="summary-container">']
+
+#     def format_title(key_str: str) -> str:
+#         # This helper is still useful
+#         return re.sub(r'(?<!^)(?=[A-Z])', ' ', key_str).replace('_', ' ').title()
+
+#     def render_list_of_dicts(items):
+#         if not items: return "<p><em>N/A</em></p>"
+#         if isinstance(items, dict): items = [items]
+#         if not isinstance(items, list): return f"<p>{items}</p>"
+
+#         item_html = '<ul class="item-list">'
+#         for item in items:
+#             if isinstance(item, dict):
+#                 # Add a class name for styling
+#                 item_html += '<li class="item-card">'
+#                 for k, v in item.items():
+#                     key_title = format_title(k)
+#                     item_html += f'<div><strong>{key_title}:</strong> '
+#                     if isinstance(v, list):
+#                         item_html += "<ul>" + "".join(f"<li>{val}</li>" for val in v) + "</ul>"
+#                     else:
+#                         item_html += str(v)
+#                     item_html += '</div>'
+#                 item_html += '</li>'
+#             else:
+#                 item_html += f'<li>{item}</li>'
+#         item_html += '</ul>'
+#         return item_html
+
+#     for major_key, minor_data in data_dict.items():
+#         html_parts.append(f'<h4>{format_title(major_key)}</h4>')
+#         if isinstance(minor_data, dict):
+#             for minor_key, content in minor_data.items():
+#                 html_parts.append(f'<h5>{format_title(minor_key)}</h5>')
+#                 if not content and not isinstance(content, bool):
+#                     html_parts.append('<p><em>N/A</em></p>')
+#                 else:
+#                     html_parts.append(render_list_of_dicts(content))
+#         elif isinstance(minor_data, list):
+#              html_parts.append(render_list_of_dicts(minor_data))
+#         else:
+#             html_parts.append(f'<p>{str(minor_data) if minor_data else "<em>N/A</em>"}</p>')
+
+#     html_parts.append('</div>')
+    
+#     # Return ONLY the HTML structure, no <style> tag
+#     return "".join(html_parts)
+
+
+
+
 # Helper function to check for empty data
 def is_section_empty(section_data):
     if isinstance(section_data, str):
@@ -656,442 +1616,6 @@ def generate_html_breakdown(parsed_dict: dict) -> dict:
         "full_html": full_html_with_styles
     }
 
-def convert_json_to_html(json_data: dict) -> str:
-    """
-    Convert JSON data to HTML format using the existing generate_html_breakdown function.
-    This is a convenience wrapper for the test endpoints.
-    """
-    if not json_data or not isinstance(json_data, dict):
-        return "<p>No data available to convert.</p>"
-    
-    try:
-        html_result = generate_html_breakdown(json_data)
-        return html_result['full_html']
-    except Exception as e:
-        logger.error(f"Error converting JSON to HTML: {str(e)}")
-        return f"<p>Error converting data to HTML: {str(e)}</p>"
-
-# Intelligent Markdown Cleaner and HTML Converter
-class IntelligentMarkdownProcessor:
-    
-    @staticmethod
-    def clean_markdown_response(raw_markdown):
-        """
-        Comprehensively clean and format markdown response from AI
-        """
-        if not raw_markdown or not raw_markdown.strip():
-            return "No summary available"
-        
-        processor = IntelligentMarkdownProcessor()
-        
-        # Step 1: Normalize and pre-process
-        content = processor._deep_normalize(raw_markdown.strip())
-        
-        # Step 2: Fix all structural and formatting issues BEFORE markdown conversion
-        content = processor._comprehensive_fix(content)
-        
-        # Step 3: Final validation and cleanup
-        content = processor._final_cleanup(content)
-        
-        return content
-    
-    def _deep_normalize(self, content):
-        """Deep normalization of content"""
-        # Normalize line endings and whitespace
-        content = content.replace('\r\n', '\n').replace('\r', '\n')
-        
-        # Split into lines for processing
-        lines = content.split('\n')
-        normalized_lines = []
-        
-        for line in lines:
-            # Remove excessive whitespace but preserve intentional indentation
-            if line.strip():
-                # Keep leading whitespace for indented content, clean trailing
-                leading_space = len(line) - len(line.lstrip())
-                cleaned_content = line.strip()
-                normalized_lines.append(' ' * min(leading_space, 4) + cleaned_content)
-            else:
-                normalized_lines.append('')
-        
-        return '\n'.join(normalized_lines)
-    
-    def _comprehensive_fix(self, content):
-        """Fix all issues comprehensively before markdown conversion"""
-        lines = content.split('\n')
-        fixed_lines = []
-        current_section_type = None
-        
-        for i, line in enumerate(lines):
-            original_line = line
-            stripped = line.strip()
-            
-            if not stripped:
-                fixed_lines.append(line)
-                continue
-            
-            # Determine what type of content this is
-            content_type = self._identify_content_type(stripped)
-            
-            # Fix based on content type
-            if content_type == 'title':
-                fixed_line = self._fix_title(stripped)
-                current_section_type = 'title'
-                
-            elif content_type == 'section_heading':
-                fixed_line = self._fix_section_heading(stripped)
-                current_section_type = 'section'
-                
-            elif content_type == 'subsection_heading':
-                fixed_line = self._fix_subsection_heading(stripped)
-                current_section_type = 'subsection'
-                
-            elif content_type == 'checkbox':
-                fixed_line = self._fix_checkbox_comprehensive(stripped)
-                
-            elif content_type == 'list_item':
-                fixed_line = self._fix_list_item_comprehensive(stripped)
-                
-            elif content_type == 'responsibility':
-                fixed_line = self._fix_responsibility(stripped)
-                
-            elif content_type == 'deadline':
-                fixed_line = self._fix_deadline(stripped)
-                
-            elif content_type == 'regular_text':
-                fixed_line = self._fix_regular_text(stripped, current_section_type)
-                
-            else:
-                fixed_line = self._fix_text_formatting(stripped)
-            
-            fixed_lines.append(fixed_line)
-        
-        return '\n'.join(fixed_lines)
-    
-    def _identify_content_type(self, line):
-        """Identify what type of content this line represents"""
-        if 'Email Analysis Summary' in line:
-            return 'title'
-        elif re.match(r'^#{0,6}\s*\d+\.\s+', line):
-            return 'section_heading'
-        elif re.match(r'^#{0,6}\s*[A-Za-z][^:]*$', line) and len(line.split()) <= 5:
-            return 'subsection_heading'
-        elif re.match(r'^[-*+]?\s*\[\s*[x\s]*\]\s*', line, re.IGNORECASE):
-            return 'checkbox'
-        elif re.match(r'^[-*+]\s+', line):
-            return 'list_item'
-        elif re.match(r'^\*\*[^*]+\*\*:\s*$', line):
-            return 'responsibility'
-        elif re.match(r'^\*\*[^*]+\*\*:\s*.+', line):
-            return 'deadline'
-        elif re.match(r'^(Generated|Version|Source):', line):
-            return 'metadata'
-        else:
-            return 'regular_text'
-    
-    def _fix_title(self, line):
-        """Fix title formatting"""
-        return '# Email Analysis Summary'
-    
-    def _fix_section_heading(self, line):
-        """Fix section heading formatting"""
-        # Extract section number and title
-        match = re.match(r'^#{0,6}\s*(\d+)\.\s*(.+)', line)
-        if match:
-            num, title = match.groups()
-            return f'## {num}. {title.strip()}'
-        return f'## {line.strip()}'
-    
-    def _fix_subsection_heading(self, line):
-        """Fix subsection heading formatting"""
-        clean_title = re.sub(r'^#{0,6}\s*', '', line).strip()
-        return f'### {clean_title}'
-    
-    def _fix_checkbox_comprehensive(self, line):
-        """Comprehensively fix checkbox formatting"""
-        # Remove any existing list markers and checkbox brackets
-        content = re.sub(r'^[-*+]?\s*\[\s*[x\s]*\]\s*', '', line, flags=re.IGNORECASE)
-        
-        # Determine if it should be checked
-        is_checked = bool(re.search(r'\[x\]', line, re.IGNORECASE))
-        
-        # Return proper checkbox format
-        checkbox_marker = '- [x]' if is_checked else '- [ ]'
-        return f'{checkbox_marker} {content.strip()}'
-    
-    def _fix_list_item_comprehensive(self, line):
-        """Comprehensively fix list item formatting"""
-        # Extract content after any list marker
-        content = re.sub(r'^[-*+]\s*', '', line).strip()
-        
-        # Handle malformed items like "-Word" -> "- Word"
-        content = re.sub(r'^([A-Z])', r'\1', content)
-        
-        return f'- {content}'
-    
-    def _fix_responsibility(self, line):
-        """Fix responsibility formatting"""
-        match = re.match(r'^\*\*([^*]+)\*\*:\s*$', line)
-        if match:
-            return f'**{match.group(1).strip()}:**'
-        return line
-    
-    def _fix_deadline(self, line):
-        """Fix deadline formatting"""
-        match = re.match(r'^\*\*([^*]+)\*\*:\s*(.+)', line)
-        if match:
-            date_part, desc_part = match.groups()
-            return f'**{date_part.strip()}:** {desc_part.strip()}'
-        return line
-    
-    def _fix_regular_text(self, line, section_type):
-        """Fix regular text with context awareness"""
-        # Apply text formatting fixes
-        fixed = self._fix_text_formatting(line)
-        
-        # Context-aware fixes - convert plain text to lists in certain sections
-        if section_type in ['subsection'] and len(fixed) > 15 and not fixed.startswith(('**', '-', '*', '+')):
-            # This might be content that should be a list item
-            if not re.match(r'^(Generated|Version|Source):', fixed):
-                return f'- {fixed}'
-        
-        return fixed
-    
-    def _fix_text_formatting(self, line):
-        """Fix text formatting issues comprehensively"""
-        # Fix bold text first
-        line = re.sub(r'\*\*\s*([^*]+?)\s*\*\*', r'**\1**', line)
-        
-        # Fix spacing around bold text - handle all cases
-        # Case 1: word**bold**word -> word **bold** word
-        line = re.sub(r'(\w)\*\*([^*]+?)\*\*(\w)', r'\1 **\2** \3', line)
-        
-        # Case 2: **bold**word -> **bold** word  
-        line = re.sub(r'\*\*([^*]+?)\*\*([a-zA-Z])', r'**\1** \2', line)
-        
-        # Case 3: word**bold** -> word **bold**
-        line = re.sub(r'([a-zA-Z])\*\*([^*]+?)\*\*', r'\1 **\2**', line)
-        
-        # Fix spacing with punctuation - CRITICAL FIX
-        # **bold** 's -> **bold**'s (remove space before apostrophe)
-        line = re.sub(r'\*\*([^*]+?)\*\*\s+([\'\.,;:!?])', r'**\1**\2', line)
-        
-        # Fix word concatenation
-        line = re.sub(r'([a-z])([A-Z][a-z])', r'\1 \2', line)
-        
-        # Fix specific concatenation patterns
-        line = re.sub(r'(\w)(and|or|on|in|at|to|for|with|by)([A-Z])', r'\1 \2 \3', line)
-        
-        # Fix emoji spacing
-        line = re.sub(r'([💰💸📊💵⏰])\s*([^\s\n])', r'\1 \2', line)
-        
-        return line
-    
-    def _final_cleanup(self, content):
-        """Final cleanup and optimization"""
-        lines = content.split('\n')
-        cleaned_lines = []
-        prev_was_empty = False
-        
-        for line in lines:
-            is_empty = not line.strip()
-            
-            # Prevent more than one consecutive empty line
-            if is_empty and prev_was_empty:
-                continue
-                
-            cleaned_lines.append(line)
-            prev_was_empty = is_empty
-        
-        # Remove leading and trailing empty lines
-        while cleaned_lines and not cleaned_lines[0].strip():
-            cleaned_lines.pop(0)
-        while cleaned_lines and not cleaned_lines[-1].strip():
-            cleaned_lines.pop()
-        
-        return '\n'.join(cleaned_lines)
-    
-    @staticmethod
-    def convert_to_html(cleaned_markdown):
-        """Convert cleaned markdown to HTML with post-processing fixes"""
-        
-        if not cleaned_markdown or not cleaned_markdown.strip():
-            return "<p>No summary available</p>"
-        
-        # Convert markdown to HTML
-        md = markdown.Markdown(extensions=[
-            'markdown.extensions.extra',
-            'markdown.extensions.codehilite'
-        ])
-        
-        html_content = md.convert(cleaned_markdown)
-        
-        # Apply comprehensive post-processing
-        processor = IntelligentMarkdownProcessor()
-        html_content = processor._post_process_html(html_content)
-        
-        return html_content
-    
-    def _post_process_html(self, html_content):
-        """Comprehensive HTML post-processing"""
-        
-        # First, fix any issues the markdown converter created
-        html_content = self._fix_markdown_converter_issues(html_content)
-        
-        # Then apply styling and enhancements
-        html_content = self._apply_comprehensive_styling(html_content)
-        
-        return html_content
-    
-    def _fix_markdown_converter_issues(self, html_content):
-        """Fix issues created by the markdown converter"""
-        
-        # Fix checkboxes that got converted incorrectly - handle ALL variations
-        # Pattern 1: <li>- [ ] content</li> -> proper checkbox
-        html_content = re.sub(
-            r'<li>-\s*\[\s*\]\s*([^<]+)</li>',
-            r'<li class="checkbox-item"><input type="checkbox" disabled> <span>\1</span></li>',
-            html_content
-        )
-        
-        # Pattern 2: <li>- [x] content</li> -> checked checkbox
-        html_content = re.sub(
-            r'<li>-\s*\[x\]\s*([^<]+)</li>',
-            r'<li class="checkbox-item"><input type="checkbox" checked disabled> <span>\1</span></li>',
-            html_content,
-            flags=re.IGNORECASE
-        )
-        
-        # Pattern 3: <li>[ ] content</li> -> proper checkbox (without dash)
-        html_content = re.sub(
-            r'<li>\[\s*\]\s*([^<]+)</li>',
-            r'<li class="checkbox-item"><input type="checkbox" disabled> <span>\1</span></li>',
-            html_content
-        )
-        
-        # Pattern 4: <li>[x] content</li> -> checked checkbox (without dash)
-        html_content = re.sub(
-            r'<li>\[x\]\s*([^<]+)</li>',
-            r'<li class="checkbox-item"><input type="checkbox" checked disabled> <span>\1</span></li>',
-            html_content,
-            flags=re.IGNORECASE
-        )
-        
-        # Fix checkbox patterns in paragraphs
-        html_content = re.sub(
-            r'<p>-?\s*\[\s*\]\s*([^<]+)</p>',
-            r'<div class="checkbox-item"><input type="checkbox" disabled> <span>\1</span></div>',
-            html_content
-        )
-        
-        html_content = re.sub(
-            r'<p>-?\s*\[x\]\s*([^<]+)</p>',
-            r'<div class="checkbox-item"><input type="checkbox" checked disabled> <span>\1</span></div>',
-            html_content,
-            flags=re.IGNORECASE
-        )
-        
-        # Fix plain text checkboxes that appear as text
-        html_content = re.sub(
-            r'(\[\s*\])\s*([^<\n]+)',
-            r'<input type="checkbox" disabled style="margin-right: 0.5em;"> <span>\2</span>',
-            html_content
-        )
-        
-        html_content = re.sub(
-            r'(\[x\])\s*([^<\n]+)',
-            r'<input type="checkbox" checked disabled style="margin-right: 0.5em;"> <span>\2</span>',
-            html_content,
-            flags=re.IGNORECASE
-        )
-        
-        return html_content
-    
-    def _apply_comprehensive_styling(self, html_content):
-        """Apply comprehensive styling to HTML"""
-        
-        # Define all styles upfront
-        styles = {
-            'container': 'font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; color: #333; max-width: 100%; padding: 1.5em; background: #fff;',
-            'h1': 'font-size: 2.2em; font-weight: bold; margin: 0 0 1.5em 0; color: #1a365d; border-bottom: 3px solid #3182ce; padding-bottom: 0.5em;',
-            'h2': 'font-size: 1.6em; font-weight: bold; margin: 2.5em 0 1em 0; color: #2d3748; border-bottom: 2px solid #4299e1; padding-bottom: 0.3em;',
-            'h3': 'font-size: 1.3em; font-weight: 600; margin: 1.8em 0 0.8em 0; color: #4a5568;',
-            'ul': 'margin: 1em 0; padding-left: 1.5em; list-style-type: disc;',
-            'li': 'margin: 0.4em 0; line-height: 1.5;',
-            'checkbox_li': 'list-style: none; margin: 0.6em 0; position: relative; padding-left: 0; display: flex; align-items: flex-start;',
-            'checkbox_input': 'margin-right: 0.5em; margin-top: 0.1em; transform: scale(1.1); flex-shrink: 0;',
-            'responsibility': 'font-weight: 600; margin: 1.5em 0 0.8em 0; color: #2d3748; font-size: 1.1em; background: #f7fafc; padding: 0.5em; border-radius: 4px; border-left: 3px solid #4299e1;',
-            'deadline': 'margin: 0.8em 0; padding: 0.8em; background: linear-gradient(135deg, #fff5f5, #ffe8e8); border-left: 4px solid #e53e3e; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);',
-            'deadline_date': 'font-weight: bold; color: #c53030; font-size: 1.05em;',
-            'financial': 'margin: 0.5em 0; padding: 0.6em; background: #f7fafc; border-radius: 6px; border-left: 3px solid #38b2ac;',
-            'emoji': 'margin-right: 0.6em; font-size: 1.2em;'
-        }
-        
-        # Apply heading styles with clear hierarchy
-        html_content = re.sub(r'<h1>', f'<h1 style="{styles["h1"]}">', html_content)
-        html_content = re.sub(r'<h2>', f'<h2 style="{styles["h2"]}">', html_content)
-        html_content = re.sub(r'<h3>', f'<h3 style="{styles["h3"]}">', html_content)
-        
-        # Apply list styles
-        html_content = re.sub(r'<ul>', f'<ul style="{styles["ul"]}">', html_content)
-        
-        # Style regular list items
-        html_content = re.sub(r'<li>(?!<)', f'<li style="{styles["li"]}">', html_content)
-        
-        # Style checkbox items specifically
-        html_content = re.sub(
-            r'<li class="checkbox-item">',
-            f'<li class="checkbox-item" style="{styles["checkbox_li"]}">',
-            html_content
-        )
-        
-        # Style checkbox inputs
-        html_content = re.sub(
-            r'<input type="checkbox"([^>]*)>',
-            f'<input type="checkbox"\\1 style="{styles["checkbox_input"]}">',
-            html_content
-        )
-        
-        # Handle financial items with emojis
-        for emoji in ['💰', '💸', '📊', '💵', '⏰']:
-            html_content = re.sub(
-                f'<li[^>]*>\\s*{re.escape(emoji)}\\s*([^<]+)</li>',
-                f'<li style="{styles["financial"]}"><span style="{styles["emoji"]}">{emoji}</span><span>\\1</span></li>',
-                html_content
-            )
-        
-        # Handle responsibility sections
-        html_content = re.sub(
-            r'<p><strong>([^<]+?):</strong></p>',
-            f'<div style="{styles["responsibility"]}">\\1:</div>',
-            html_content
-        )
-        
-        # Handle responsibility sections that might be in different formats
-        html_content = re.sub(
-            r'<p><strong>([^<]+?)</strong>:\s*</p>',
-            f'<div style="{styles["responsibility"]}">\\1:</div>',
-            html_content
-        )
-        
-        # Handle inline responsibility format
-        html_content = re.sub(
-            r'<p><strong>([^<]+?):</strong>\s*([^<]+?)</p>',
-            f'<div style="{styles["responsibility"]}">\\1:</div><p style="margin: 0.5em 0;">\\2</p>',
-            html_content
-        )
-        
-        # Handle deadline formatting - make sure it doesn't conflict with responsibility
-        html_content = re.sub(
-            r'<p><strong>([^<]*?(?:PM|AM|UTC)[^<]*?):</strong>\s*([^<]+?)</p>',
-            f'<div style="{styles["deadline"]}"><span style="{styles["deadline_date"]}">\\1:</span> <span>\\2</span></div>',
-            html_content
-        )
-        
-        # Wrap in styled container
-        html_content = f'<div style="{styles["container"]}">{html_content}</div>'
-        
-        return html_content
 
 # JWT Authentication decorator
 def authenticate_jwt(f):
@@ -1143,6 +1667,113 @@ def health_check():
         'gemini_configured': GEMINI_API_KEY is not None
     }), 200
 
+
+# @app.route('/api/emails/<email_id>/summarize', methods=['POST'])
+# @authenticate_jwt
+# def summarize_email(email_id):
+#     """
+#     This is the new, unified summarization endpoint. It handles multiple AI
+#     response formats and uses a single, consistent pipeline to generate the final HTML.
+#     """
+#     user_id = request.user.get('id')
+#     logger.info(f"Received request to summarize email ID: {email_id} for user: {user_id}")
+    
+#     if not GEMINI_API_KEY:
+#         logger.error("Gemini API is not configured")
+#         return jsonify({'message': 'AI service is not properly configured'}), 500
+
+#     try:
+#         # STEP 1: FETCH THE EMAIL DATA (Your existing code is good)
+#         logger.info(f"Fetching email content for ID: {email_id}")
+#         headers = {'Authorization': request.headers.get('Authorization')}
+#         response = requests.get(
+#             f"{EMAIL_SERVICE_URL}/api/emails/{email_id}",
+#             headers=headers,
+#             timeout=30
+#         )
+#         response.raise_for_status() # This is a cleaner way to handle bad responses
+#         email_data = response.json()
+        
+#         # This part of your code is also correct
+#         processed_data = process_email_with_images(email_data)
+#         body = processed_data.get('emailBody', '')
+#         image_content = processed_data.get('imageContent', [])
+        
+#         if not body and not image_content:
+#             logger.error(f"No content found for email ID: {email_id}")
+#             return jsonify({'message': 'Could not find text content in this email to summarize'}), 400
+        
+#         clean_body = re.sub(r'<[^>]*>', '', body)
+#         combined_content = clean_body + "\n".join(
+#             [f"\n--- IMAGE: {img['imageName']} ---\n{img['extractedText']}" for img in image_content]
+#         )
+#         structured_input = {"emailBody": combined_content, "imageContent": [], "attachmentContent": []}
+
+#         # STEP 2: CALL THE GEMINI AI (Your existing code is good)
+#         prompt = f"{prompt_text}:\n\n{json.dumps(structured_input, indent=2)}"
+#         gemini_payload = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
+#         logger.info(f"Sending request to Gemini API for email summarization.")
+        
+#         api_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+#         gemini_response = requests.post(api_url, headers={'Content-Type': 'application/json'}, json=gemini_payload, timeout=60)
+        
+#         if not gemini_response.ok:
+#             logger.error(f"Gemini API request failed: {gemini_response.text}")
+#             return jsonify({'message': 'Failed to generate email summary.'}), 500
+        
+#         result = gemini_response.json()
+        
+#         if not (result.get('candidates') and len(result['candidates']) > 0):
+#              logger.error("Invalid response format from Gemini API")
+#              return jsonify({'message': 'Invalid response format from Gemini API'}), 500
+        
+#         raw_summary = result['candidates'][0]['content']['parts'][0]['text']
+#         logger.info("Raw summary received from Gemini.")
+
+
+#         parsed_dict = None
+
+#         # Step 2a: Clean the raw AI response to remove markdown fences
+#         clean_text = raw_summary.strip()
+#         if clean_text.startswith('```json'):
+#             clean_text = clean_text[7:].strip()
+#         if clean_text.endswith('```'):
+#             clean_text = clean_text[:-3].strip()
+
+#         # Step 2b: Try parsing as perfect JSON first (best case)
+#         try:
+#             logger.info("Attempting to parse response as pure JSON.")
+#             parsed_dict = json.loads(clean_text)
+#             logger.info("Successfully parsed as pure JSON.")
+#         except json.JSONDecodeError:
+#             # Step 2c: If JSON fails, fall back to our robust text parser
+#             logger.warning("JSON parsing failed. Falling back to custom text parser.")
+#             parsed_dict = parse_summary_to_dict(raw_summary, ALL_SCHEMA_KEYS)
+#             logger.info("Successfully parsed summary from text block.")
+        
+#         if not parsed_dict:
+#              logger.error("Could not produce a valid dictionary from the AI response.")
+#              return jsonify({'summary': '<p>Error: The AI response could not be understood.</p>'}), 500
+        
+#         logger.info("Converting final dictionary to HTML.")
+
+#         # Call the new function to get the HTML breakdown
+#         html_payload = generate_html_breakdown(parsed_dict)
+        
+#         # Return the new JSON structure to the frontend
+#         return jsonify({
+#             'summary_html_breakdown': html_payload['breakdown'],
+#             'summary_html_full': html_payload['full_html'],
+#             'summary_json': parsed_dict
+#         }), 200
+
+#     except requests.RequestException as e:
+#         logger.error(f"Error communicating with a service: {str(e)}")
+#         return jsonify({'message': 'Error communicating with a service.'}), 500
+#     except Exception as e:
+#         logger.error(f"An unexpected error occurred in summarize_email: {str(e)}")
+#         return jsonify({'message': 'An internal server error occurred.'}), 500
+
 # In your Python script (e.g., app.py)
 # This is the new, simpler, and final version of the function.
 
@@ -1157,22 +1788,10 @@ def summarize_email(email_id):
 
     try:
         # --- Step 1: Fetch and Prepare Email Content (No changes here) ---
-        # Check if email data is provided in the request body
-        request_data = request.get_json()
-        
-        if request_data and request_data.get('body'):
-            # Use email data from request body (preferred for database emails)
-            body = request_data.get('body', '')
-            logger.info(f"Using email data from request body for email: {email_id}")
-            email_data = request_data
-        else:
-            # Fallback: fetch from email service (for Gmail message IDs)
-            headers = {'Authorization': request.headers.get('Authorization')}
-            response = requests.get(f"{EMAIL_SERVICE_URL}/api/emails/{email_id}", headers=headers, timeout=30)
-            response.raise_for_status()
-            email_data = response.json()
-            body = email_data.get('body', '')
-            logger.info(f"Fetched email data from email service for email: {email_id}")
+        headers = {'Authorization': request.headers.get('Authorization')}
+        response = requests.get(f"{EMAIL_SERVICE_URL}/api/emails/{email_id}", headers=headers, timeout=30)
+        response.raise_for_status()
+        email_data = response.json()
         
         processed_data = process_email_with_images(email_data)
         body = processed_data.get('emailBody', '')
@@ -1241,49 +1860,6 @@ def summarize_email(email_id):
         logger.error(f"An unexpected error occurred in summarize_email: {str(e)}")
         return jsonify({'message': 'An internal server error occurred.'}), 500
 
-@app.route('/api/ai/generate-content', methods=['POST'])
-@authenticate_jwt
-def generate_content():
-    """General AI content generation endpoint"""
-    try:
-        data = request.get_json()
-        prompt = data.get('prompt')
-        
-        if not prompt:
-            return jsonify({'message': 'Prompt is required'}), 400
-        
-        if not GEMINI_API_KEY:
-            return jsonify({'message': 'AI service is not properly configured'}), 500
-        
-        logger.info("Generating AI content")
-        response = requests.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}",
-            headers={'Content-Type': 'application/json'},
-            json={"contents": [{"role": "user", "parts": [{"text": prompt}]}]},
-            timeout=60
-        )
-        
-        if not response.ok:
-            error_text = response.text
-            logger.error(f"Gemini API request failed: {error_text}")
-            return jsonify({'message': 'Failed to generate content'}), 500
-        
-        result = response.json()
-        
-        if result.get('candidates') and len(result['candidates']) > 0:
-            content = result['candidates'][0]['content']['parts'][0]['text']
-            logger.info(f"Successfully generated content for prompt: {prompt}")
-            return jsonify({'content': content}), 200
-        else:
-            logger.error("Unexpected response format from Gemini API")
-            return jsonify({'message': 'Unexpected response format from Gemini API'}), 500
-        
-    except requests.RequestException as e:
-        logger.error(f"Error generating content: {str(e)}")
-        return jsonify({'message': 'Failed to generate content'}), 500
-    except Exception as e:
-        logger.error(f"Error generating content: {str(e)}")
-        return jsonify({'message': 'Failed to generate content'}), 500
 
 @app.route('/api/emails/<email_id>/summarize-json', methods=['POST'])
 @authenticate_jwt
@@ -1431,6 +2007,50 @@ def summarize_email_json(email_id):
     except Exception as e:
         logger.error(f"Error summarizing email {email_id} for user {user_id}: {str(e)}")
         return jsonify({'message': 'Failed to generate email summary'}), 500
+
+@app.route('/api/ai/generate-content', methods=['POST'])
+@authenticate_jwt
+def generate_content():
+    """General AI content generation endpoint"""
+    try:
+        data = request.get_json()
+        prompt = data.get('prompt')
+        
+        if not prompt:
+            return jsonify({'message': 'Prompt is required'}), 400
+        
+        if not GEMINI_API_KEY:
+            return jsonify({'message': 'AI service is not properly configured'}), 500
+        
+        logger.info("Generating AI content")
+        response = requests.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}",
+            headers={'Content-Type': 'application/json'},
+            json={"contents": [{"role": "user", "parts": [{"text": prompt}]}]},
+            timeout=60
+        )
+        
+        if not response.ok:
+            error_text = response.text
+            logger.error(f"Gemini API request failed: {error_text}")
+            return jsonify({'message': 'Failed to generate content'}), 500
+        
+        result = response.json()
+        
+        if result.get('candidates') and len(result['candidates']) > 0:
+            content = result['candidates'][0]['content']['parts'][0]['text']
+            logger.info(f"Successfully generated content for prompt: {prompt}")
+            return jsonify({'content': content}), 200
+        else:
+            logger.error("Unexpected response format from Gemini API")
+            return jsonify({'message': 'Unexpected response format from Gemini API'}), 500
+        
+    except requests.RequestException as e:
+        logger.error(f"Error generating content: {str(e)}")
+        return jsonify({'message': 'Failed to generate content'}), 500
+    except Exception as e:
+        logger.error(f"Error generating content: {str(e)}")
+        return jsonify({'message': 'Failed to generate content'}), 500
 
 @app.route('/api/debug/check-email-images', methods=['POST'])
 @authenticate_jwt
@@ -1708,16 +2328,19 @@ def generate_daily_digest():
         
         summaries = data.get('summaries', [])
         target_date = data.get('date', datetime.now().strftime('%Y-%m-%d'))
+        provider_counts = data.get('providerCounts', {})
         
         if not summaries:
             return jsonify({'message': 'No email summaries provided'}), 400
         
         logger.info(f"Processing {len(summaries)} email summaries for daily digest on {target_date}")
+        logger.info(f"Provider breakdown: {provider_counts}")
         
-        # Create consolidated summary data
+        # Create consolidated summary data with provider information
         consolidated_data = {
             "date": target_date,
             "totalEmails": len(summaries),
+            "providerBreakdown": provider_counts,
             "emailSummaries": summaries
         }
         
@@ -1726,19 +2349,23 @@ def generate_daily_digest():
         You are an executive assistant creating a comprehensive daily email digest. 
         Analyze the following email summaries from {target_date} and create a structured daily digest.
         
+        Note: This digest includes emails from multiple providers (Gmail: {provider_counts.get('gmail', 0)}, Outlook: {provider_counts.get('outlook', 0)}, Other: {provider_counts.get('unknown', 0)}).
+        
         Your task is to:
-        1. Provide an executive overview of the day's email activity
+        1. Provide an executive overview of the day's email activity across all connected accounts
         2. Highlight the most critical action items and decisions needed
         3. Summarize key financial impacts and business implications
         4. Identify urgent matters requiring immediate attention
         5. Group similar topics together for easier consumption
         6. Create a concise audio script for the digest
+        7. Include provider-specific insights if relevant (e.g., work emails from Outlook vs personal from Gmail)
         
         Please respond with a JSON object following this structure:
         {{
             "date": "{target_date}",
             "executiveSummary": {{
                 "totalEmails": {len(summaries)},
+                "providerBreakdown": {provider_counts},
                 "keyHighlights": ["highlight1", "highlight2", "highlight3"],
                 "criticalActions": ["action1", "action2"],
                 "urgentMatters": ["urgent1", "urgent2"]

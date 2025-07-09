@@ -5,8 +5,12 @@ import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import { google } from 'googleapis';
 import fetch from 'node-fetch';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { getDb, emailAccounts, type EmailAccount, type NewEmailAccount } from '../../shared/db/connection';
+import { summaryQueue } from '../../shared/queues/summaryQueue';
+import '../../shared/queues/processors/AISummaryProcessor'; // This ensures the worker starts listening
+import { createServer } from 'http';
+import { Server } from 'socket.io';
 
 // Load environment variables
 const envPath = path.resolve(__dirname, '../../.env');
@@ -72,6 +76,16 @@ declare global {
     }
 }
 
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: "http://localhost:3000", // Allow the frontend to connect
+    methods: ["GET", "POST"]
+  }
+});
+
+export { io };
+
 // Routes
 const router = express.Router();
 
@@ -91,37 +105,61 @@ router.post('/api/auth/google/callback', authenticateJWT, async (req: Request, r
     try {
         const { tokens } = await oauth2Client.getToken(code);
         
-        const { refresh_token, access_token } = tokens;
-        if (refresh_token) {
-            console.log(`[EMAIL_SVC] Storing Google refresh token for user: ${saasUserId}`);
-            
-            // Get user's email address from Google
-            oauth2Client.setCredentials(tokens);
-            const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-            const profileResponse = await gmail.users.getProfile({ userId: 'me' });
-            const emailAddress = profileResponse.data.emailAddress;
-            
-            if (!emailAddress) {
-                throw new Error('Could not retrieve email address from Google');
-            }
-            
-            console.log(`[EMAIL_SVC] Retrieved email address: ${emailAddress}`);
+        // Get user's email address from Google to identify the account
+        oauth2Client.setCredentials(tokens);
+        const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+        const profileResponse = await gmail.users.getProfile({ userId: 'me' });
+        const emailAddress = profileResponse.data.emailAddress;
 
-            const newEmailAccount: NewEmailAccount = {
-                userId: saasUserId,
-                provider: 'google',
-                emailAddress: emailAddress,
-                refreshToken: refresh_token
-            };
-
-            await db.insert(emailAccounts).values(newEmailAccount);
-            console.log(`[EMAIL_SVC] Successfully stored Google account for user: ${saasUserId}`);
-            
-            res.status(200).json({ message: 'Google account connected successfully!' });
-        } else {
-            console.error('[EMAIL_SVC] No refresh token received from Google.');
-            res.status(400).json({ message: 'Google authentication failed: No refresh token received.' });
+        if (!emailAddress) {
+            throw new Error('Could not retrieve email address from Google');
         }
+
+        console.log(`[EMAIL_SVC] Retrieved email address: ${emailAddress} for user ${saasUserId}`);
+        
+        const existingAccount = await db.query.emailAccounts.findFirst({
+            where: and(eq(emailAccounts.userId, saasUserId), eq(emailAccounts.emailAddress, emailAddress)),
+        });
+
+        const { refresh_token, access_token, expiry_date } = tokens;
+
+        // On re-authentication, Google may not send a new refresh token.
+        // We must preserve the one we have.
+        const finalRefreshToken = refresh_token || existingAccount?.refreshToken;
+
+        if (!finalRefreshToken) {
+             console.error('[EMAIL_SVC] No refresh token available for new or existing account.');
+             res.status(400).json({ message: 'Google authentication failed: No refresh token received.' });
+             return;
+        }
+
+        const accountData = {
+            userId: saasUserId,
+            provider: 'google' as const,
+            emailAddress: emailAddress,
+            accessToken: access_token || null,
+            refreshToken: finalRefreshToken,
+            tokenExpiresAt: expiry_date ? new Date(expiry_date) : null,
+            updatedAt: new Date(),
+        };
+
+        if (existingAccount) {
+            await db.update(emailAccounts)
+                .set(accountData)
+                .where(eq(emailAccounts.id, existingAccount.id));
+            console.log(`[EMAIL_SVC] Successfully updated Google account for user: ${saasUserId}`);
+        } else {
+            await db.insert(emailAccounts).values({
+                ...accountData,
+                // These fields are only set on creation
+                isPrimary: true, // Assuming the first connected account is primary
+                syncEnabled: true,
+            });
+            console.log(`[EMAIL_SVC] Successfully stored new Google account for user: ${saasUserId}`);
+        }
+        
+        res.status(200).json({ message: 'Google account connected successfully!' });
+
     } catch (error: any) {
         console.error('[EMAIL_SVC] Error in Google auth callback:', error.message);
         res.status(500).json({ message: 'Failed to connect Google account.' });
@@ -134,35 +172,65 @@ router.post('/api/auth/google/callback', authenticateJWT, async (req: Request, r
  */
 async function getGmailClient(saasUserId: string) {
     console.log(`[EMAIL_SVC] Getting Gmail client for user: ${saasUserId}`);
-    
-    try {
-        console.log(`[EMAIL_SVC] Fetching Google refresh token from DB for user: ${saasUserId}`);
-        const [emailAccount] = await db
-            .select({ refreshToken: emailAccounts.refreshToken })
-            .from(emailAccounts)
-            .where(eq(emailAccounts.userId, saasUserId))
-            .limit(1);
 
-        const refreshToken = emailAccount?.refreshToken;
+    const emailAccount = await db.query.emailAccounts.findFirst({
+        where: and(
+            eq(emailAccounts.userId, saasUserId),
+            eq(emailAccounts.provider, 'google')
+        ),
+        orderBy: (accounts, { desc }) => [desc(accounts.createdAt)],
+    });
 
-        if (!refreshToken) {
-            console.error(`[EMAIL_SVC] No refresh token found for user: ${saasUserId}`);
-            throw new Error('Google account not connected or refresh token missing.');
-        }
-
-        console.log(`[EMAIL_SVC] Refresh token found. Initializing OAuth2 client for user: ${saasUserId}`);
-        const oauthClient = new google.auth.OAuth2(
-            process.env.GOOGLE_CLIENT_ID, 
-            process.env.GOOGLE_CLIENT_SECRET, 
-            'postmessage'
-        );
-        oauthClient.setCredentials({ refresh_token: refreshToken });
-        console.log(`[EMAIL_SVC] Gmail client ready for user: ${saasUserId}`);
-        return google.gmail({ version: 'v1', auth: oauthClient });
-    } catch (error) {
-        console.error(`[EMAIL_SVC] Error getting Gmail client for user ${saasUserId}:`, error);
-        throw error;
+    if (!emailAccount || !emailAccount.refreshToken) {
+        console.error(`[EMAIL_SVC] No Google account or refresh token found for user: ${saasUserId}`);
+        throw new Error('Google account not connected or refresh token missing.');
     }
+
+    const oauthClient = new google.auth.OAuth2(
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET,
+        'postmessage'
+    );
+
+    oauthClient.setCredentials({
+        refresh_token: emailAccount.refreshToken,
+        access_token: emailAccount.accessToken,
+        expiry_date: emailAccount.tokenExpiresAt ? emailAccount.tokenExpiresAt.getTime() : null,
+    });
+
+    // Check if token is expired or about to expire (e.g., within the next minute)
+    const isTokenExpired = emailAccount.tokenExpiresAt ? emailAccount.tokenExpiresAt.getTime() < (Date.now() + 60000) : true;
+
+    if (isTokenExpired) {
+        console.log(`[EMAIL_SVC] Access token expired or is expiring for user ${saasUserId}. Refreshing...`);
+        try {
+            const { credentials } = await oauthClient.refreshAccessToken();
+            oauthClient.setCredentials(credentials);
+
+            const newAccessToken = credentials.access_token;
+            const newExpiryDate = credentials.expiry_date;
+
+            console.log(`[EMAIL_SVC] Token refreshed successfully for user ${saasUserId}.`);
+
+            await db.update(emailAccounts).set({
+                accessToken: newAccessToken || null,
+                tokenExpiresAt: newExpiryDate ? new Date(newExpiryDate) : null,
+                updatedAt: new Date(),
+            }).where(eq(emailAccounts.id, emailAccount.id));
+
+            console.log(`[EMAIL_SVC] Persisted new token for user ${saasUserId}.`);
+        } catch (refreshError: any) {
+            console.error(`[EMAIL_SVC] Failed to refresh access token for user ${saasUserId}:`, refreshError.message);
+            // This could be a sign that the user revoked access.
+            // We should probably guide them to re-authenticate.
+            throw new Error(`Failed to refresh Google access token. Please try reconnecting your account. Reason: ${refreshError.message}`);
+        }
+    } else {
+        console.log(`[EMAIL_SVC] Existing access token is valid for user ${saasUserId}.`);
+    }
+
+    console.log(`[EMAIL_SVC] Gmail client ready for user: ${saasUserId}`);
+    return google.gmail({ version: 'v1', auth: oauthClient });
 }
 
 /**
@@ -317,6 +385,39 @@ router.get('/api/emails/:emailId', authenticateJWT, async (req: Request, res: Re
     }
 });
 
+/**
+ * POST /api/summarize-batch
+ * Receives a list of email IDs and adds them to the summarization queue.
+ */
+router.post('/api/summarize-batch', authenticateJWT, async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user!.id;
+    const { emailIds } = req.body;
+
+    if (!Array.isArray(emailIds) || emailIds.length === 0) {
+        res.status(400).json({ message: 'emailIds must be a non-empty array.' });
+        return;
+    }
+
+    console.log(`[EMAIL_SVC] Received request to batch summarize ${emailIds.length} emails for user: ${userId}`);
+
+    try {
+        const jobs = emailIds.map(emailId => ({
+            name: `summarize-email-${emailId}`,
+            data: { emailId, userId },
+        }));
+
+        await summaryQueue.addBulk(jobs);
+
+        console.log(`[EMAIL_SVC] Successfully queued ${jobs.length} emails for summarization.`);
+        res.status(202).json({ 
+            message: `Successfully queued ${jobs.length} emails for summarization. The UI will update as they are completed.` 
+        });
+    } catch (error: any) {
+        console.error(`[EMAIL_SVC] Error queuing batch summarization for user ${userId}:`, error.message);
+        res.status(500).json({ message: 'Failed to queue emails for summarization.' });
+    }
+});
+
 // Health check endpoint
 router.get('/health', (req: Request, res: Response) => {
     res.status(200).json({ 
@@ -326,8 +427,24 @@ router.get('/health', (req: Request, res: Response) => {
     });
 });
 
+// Socket.io connection handling
+io.on('connection', (socket) => {
+  console.log('[SOCKET.IO] a user connected:', socket.id);
+
+  // Here you could join rooms based on userId for targeted messages
+  socket.on('join-room', (userId) => {
+    console.log(`[SOCKET.IO] User ${userId} joined room`);
+    socket.join(userId);
+  });
+
+  socket.on('disconnect', () => {
+    console.log('[SOCKET.IO] user disconnected:', socket.id);
+  });
+});
+
 app.use(router);
 
-app.listen(PORT, () => {
-    console.log(`✅ Email Sync Proxy Service running on http://localhost:${PORT}`);
+// Start server
+httpServer.listen(PORT, () => {
+    console.log(`[EMAIL_SVC] ✅ Email Sync/Proxy Service running on http://localhost:${PORT}`);
 }); 

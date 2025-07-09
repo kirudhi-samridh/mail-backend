@@ -45,7 +45,6 @@ export async function setupOnboardingQueues() {
     // Set up workers for each queue
     const onboardingProcessor = new OnboardingProcessor();
     const bulkEmailFetchProcessor = new BulkEmailFetchProcessor();
-    const aiSummaryProcessor = new AISummaryProcessor();
     const finalizeOnboardingProcessor = new FinalizeOnboardingProcessor();
 
     // Create workers with processor functions
@@ -60,10 +59,6 @@ export async function setupOnboardingQueues() {
     
     emailProcessingQueue.createWorker(async (job) => {
       return await bulkEmailFetchProcessor.process(job);
-    });
-    
-    aiProcessingQueue.createWorker(async (job) => {
-      return await aiSummaryProcessor.process(job);
     });
 
     console.log('[QUEUE_SETUP] ✅ Onboarding queues and workers initialized successfully');

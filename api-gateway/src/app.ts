@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import * as dotenv from 'dotenv';
@@ -15,7 +15,7 @@ const PORT = process.env.API_GATEWAY_PORT || 3001;
 app.use(cors());
 
 // Enhanced logging middleware
-app.use((req, res, next) => {
+app.use((req: Request, res: Response, next: NextFunction) => {
     console.log(`[GW] ${new Date().toISOString()} - ${req.method} ${req.originalUrl}`);
     console.log(`[GW] Headers:`, JSON.stringify(req.headers, null, 2));
     if (req.body && Object.keys(req.body).length > 0) {
@@ -46,14 +46,14 @@ const userServiceProxy = createProxyMiddleware({
     changeOrigin: true,
     on:{
         proxyReq: (proxyReq, req, res) => {
-            console.log(`[GW] Proxying to User Service: ${req.method} ${req.originalUrl} -> ${proxyReq.path}`);
+            console.log(`[GW] Proxying to User Service: ${req.method} ${(req as Request).originalUrl} -> ${proxyReq.path}`);
         },
         proxyRes: (proxyRes, req, res) => {
-            console.log(`[GW] User Service responded: ${proxyRes.statusCode} for ${req.originalUrl}`);
+            console.log(`[GW] User Service responded: ${proxyRes.statusCode} for ${(req as Request).originalUrl}`);
         },
         error: (err, req, res) => {
-            console.error(`[GW] User Service proxy error for ${req.originalUrl}:`, err.message);
-            res.status(500).json({ message: 'User service unavailable' });
+            console.error(`[GW] User Service proxy error for ${(req as Request).originalUrl}:`, err.message);
+            (res as Response).status(500).json({ message: 'User service unavailable' });
         }
     }
 });
@@ -63,14 +63,14 @@ const emailServiceProxy = createProxyMiddleware({
     changeOrigin: true,
     on:{
         proxyReq: (proxyReq, req, res) => {
-            console.log(`[GW] Proxying to Email Service: ${req.method} ${req.originalUrl} -> ${proxyReq.path}`);
+            console.log(`[GW] Proxying to Email Service: ${req.method} ${(req as Request).originalUrl} -> ${proxyReq.path}`);
         },
         proxyRes: (proxyRes, req, res) => {
-            console.log(`[GW] Email Service responded: ${proxyRes.statusCode} for ${req.originalUrl}`);
+            console.log(`[GW] Email Service responded: ${proxyRes.statusCode} for ${(req as Request).originalUrl}`);
         },
         error: (err, req, res) => {
-            console.error(`[GW] Email Service proxy error for ${req.originalUrl}:`, err.message);
-            res.status(500).json({ message: 'Email service unavailable' });
+            console.error(`[GW] Email Service proxy error for ${(req as Request).originalUrl}:`, err.message);
+            (res as Response).status(500).json({ message: 'Email service unavailable' });
         }
     }
 });
@@ -80,14 +80,14 @@ const aiServiceProxy = createProxyMiddleware({
     changeOrigin: true,
     on:{
         proxyReq: (proxyReq, req, res) => {
-            console.log(`[GW] Proxying to AI Service: ${req.method} ${req.originalUrl} -> ${proxyReq.path}`);
+            console.log(`[GW] Proxying to AI Service: ${req.method} ${(req as Request).originalUrl} -> ${proxyReq.path}`);
         },
         proxyRes: (proxyRes, req, res) => {
-            console.log(`[GW] AI Service responded: ${proxyRes.statusCode} for ${req.originalUrl}`);
+            console.log(`[GW] AI Service responded: ${proxyRes.statusCode} for ${(req as Request).originalUrl}`);
         },
         error: (err, req, res) => {
-            console.error(`[GW] AI Service proxy error for ${req.originalUrl}:`, err.message);
-            res.status(500).json({ message: 'AI service unavailable' });
+            console.error(`[GW] AI Service proxy error for ${(req as Request).originalUrl}:`, err.message);
+            (res as Response).status(500).json({ message: 'AI service unavailable' });
         }
     }
 });
@@ -97,14 +97,14 @@ const msEmailServiceProxy = createProxyMiddleware({
     changeOrigin: true,
     on:{
         proxyReq: (proxyReq, req, res) => {
-            console.log(`[GW] Proxying to MS Email Service: ${req.method} ${req.originalUrl} -> ${proxyReq.path}`);
+            console.log(`[GW] Proxying to MS Email Service: ${req.method} ${(req as Request).originalUrl} -> ${proxyReq.path}`);
         },
         proxyRes: (proxyRes, req, res) => {
-            console.log(`[GW] MS Email Service responded: ${proxyRes.statusCode} for ${req.originalUrl}`);
+            console.log(`[GW] MS Email Service responded: ${proxyRes.statusCode} for ${(req as Request).originalUrl}`);
         },
         error: (err, req, res) => {
-            console.error(`[GW] MS Email Service proxy error for ${req.originalUrl}:`, err.message);
-            res.status(500).json({ message: 'Microsoft email service unavailable' });
+            console.error(`[GW] MS Email Service proxy error for ${(req as Request).originalUrl}:`, err.message);
+            (res as Response).status(500).json({ message: 'Microsoft email service unavailable' });
         }
     }
 });
@@ -138,8 +138,11 @@ app.post('/api/emails/:emailId/summarize', aiServiceProxy);
 app.post('/api/ai/generate-content', aiServiceProxy);
 app.post('/api/daily-digest/generate', aiServiceProxy);
 
+// New Batch Summarization Route
+app.post('/api/summarize-batch', emailServiceProxy);
+
 // Health check
-app.get('/health', (req, res) => {
+app.get('/health', (req: Request, res: Response) => {
     res.status(200).json({ 
         status: 'healthy', 
         service: 'api-gateway',
@@ -149,7 +152,7 @@ app.get('/health', (req, res) => {
 });
 
 // 404 handler
-app.use('*', (req, res) => {
+app.use('*', (req: Request, res: Response) => {
     console.log(`[GW] 404 - Route not found: ${req.method} ${req.originalUrl}`);
     res.status(404).json({ message: 'Route not found' });
 });

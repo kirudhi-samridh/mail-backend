@@ -50,7 +50,7 @@ export * from './types/queue-configs';
 // =============================================
 export { OnboardingProcessor } from './processors/OnboardingProcessor';
 export { BulkEmailFetchProcessor } from './processors/BulkEmailFetchProcessor';
-export { AISummaryProcessor } from './processors/AISummaryProcessor';
+// export { AISummaryProcessor } from './processors/AISummaryProcessor'; // This is now a standalone worker
 export { FinalizeOnboardingProcessor } from './processors/FinalizeOnboardingProcessor';
 
 // =============================================

@@ -1,77 +1,43 @@
 import Redis from 'ioredis';
 import * as dotenv from 'dotenv';
+import * as path from 'path';
 
-dotenv.config();
+// Load environment variables from the root .env file
+const envPath = path.resolve(__dirname, '../../.env');
+dotenv.config({ path: envPath });
 
 const redisConfig = {
   host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  password: process.env.REDIS_PASSWORD,
-  retryDelayOnFailover: 100,
-  maxRetriesPerRequest: 3,
-  lazyConnect: true,
-  keepAlive: 30000,
-  family: 4,
-  connectTimeout: 60000,    // Increased from 10s to 60s for WSL
-  commandTimeout: 120000,   // Increased from 30s to 120s for WSL
-  enableOfflineQueue: true,  // Fix for "Stream isn't writeable" error
+  port: parseInt(process.env.REDIS_PORT || '6379', 10),
+  password: process.env.REDIS_PASSWORD || undefined,
+  maxRetriesPerRequest: null,
 };
 
-let redisClient: Redis | null = null;
+let redisConnection: Redis;
 
-export function getRedisConnection(db: number = 0, keyPrefix?: string): Redis {
-  const redis = new Redis({
-    ...redisConfig,
-    db,
-    keyPrefix
-  });
+export function getRedisConnection(): Redis {
+  if (!redisConnection) {
+    redisConnection = new Redis(redisConfig);
 
-  // Add command debugging
-  redis.on('connect', () => {
-    console.log(`[REDIS_DEBUG] Connected to Redis (db: ${db}, prefix: ${keyPrefix || 'none'})`);
-  });
+    redisConnection.on('connect', () => {
+      console.log('[REDIS] Connection established successfully.');
+    });
 
-  redis.on('error', (err) => {
-    console.log(`[REDIS_DEBUG] Redis error (db: ${db}):`, err.message);
-  });
-
-  // Log slow commands
-  const originalSendCommand = redis.sendCommand;
-  redis.sendCommand = function(command) {
-    const startTime = Date.now();
-    const commandName = command.name;
-    const args = command.args?.slice(0, 3).join(' ') || ''; // First 3 args only
-    
-    console.log(`[REDIS_DEBUG] Executing: ${commandName} ${args}`);
-    
-    const result = originalSendCommand.call(this, command);
-    
-    if (result && typeof result.then === 'function') {
-      result.then(
-        () => {
-          const duration = Date.now() - startTime;
-          if (duration > 5000) { // Log commands taking more than 5 seconds
-            console.log(`[REDIS_DEBUG] SLOW COMMAND: ${commandName} took ${duration}ms`);
-          }
-        },
-        (err) => {
-          const duration = Date.now() - startTime;
-          console.log(`[REDIS_DEBUG] FAILED COMMAND: ${commandName} failed after ${duration}ms - ${err.message}`);
-        }
-      );
-    }
-    
-    return result;
-  };
-
-  return redis;
+    redisConnection.on('error', (err) => {
+      console.error('[REDIS] Connection error:', err);
+    });
+  }
+  return redisConnection;
 }
 
 export function getRedisClient(): Redis {
-  if (!redisClient) {
-    redisClient = getRedisConnection(0);
+  return getRedisConnection();
+}
+
+export async function closeRedisConnections(): Promise<void> {
+  if (redisConnection) {
+    redisConnection.disconnect();
   }
-  return redisClient;
 }
 
 export function getCacheClient(): Redis {
@@ -201,10 +167,4 @@ export class RateLimitService {
 }
 
 export const cacheService = new CacheService();
-export const rateLimitService = new RateLimitService();
-
-export async function closeRedisConnections(): Promise<void> {
-  if (redisClient) {
-    redisClient.disconnect();
-  }
-} 
+export const rateLimitService = new RateLimitService(); 
