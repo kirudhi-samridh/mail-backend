@@ -486,44 +486,9 @@ router.put('/api/user/subscription', authenticateJWT, async (req: Request, res: 
 // LEGACY COMPATIBILITY ROUTES
 // ==========================================
 
-// GET /api/auth/status - Enhanced with more details
-router.get('/api/auth/status', authenticateJWT, async (req: Request, res: Response): Promise<void> => {
-    const userId = req.user!.id;
-    console.log(`[USER_SVC] Checking auth status for user: ${userId}`);
-    
-    try {
-        // Check connected email accounts
-        const connectedAccounts = await db
-            .select({
-                id: emailAccounts.id,
-                provider: emailAccounts.provider,
-                emailAddress: emailAccounts.emailAddress,
-                syncStatus: emailAccounts.syncStatus,
-                isPrimary: emailAccounts.isPrimary
-            })
-            .from(emailAccounts)
-            .where(eq(emailAccounts.userId, userId));
-        
-        const isGoogleConnected = connectedAccounts.some(account => 
-            account.provider === 'gmail' && account.syncStatus === 'active'
-        );
-        
-        console.log(`[USER_SVC] Auth status - Connected accounts: ${connectedAccounts.length}, Gmail: ${isGoogleConnected}`);
-        res.status(200).json({
-            authenticated: true,
-            isGoogleConnected,
-            connectedAccounts: connectedAccounts.map(acc => ({
-                provider: acc.provider,
-                email: acc.emailAddress,
-                status: acc.syncStatus,
-                isPrimary: acc.isPrimary
-            }))
-        });
-    } catch (error: any) {
-        console.error(`[USER_SVC] Error checking auth status for user ${userId}:`, error.message);
-        res.status(500).json({ message: 'Failed to check authentication status' });
-    }
-});
+// The /api/auth/status endpoint has been moved to the email-sync-proxy-service
+// to consolidate all account and connection status logic in one place.
+// This version is now obsolete and has been removed to prevent conflicts.
 
 // ==========================================
 // ADMIN ROUTES (Future Enhancement)
@@ -556,31 +521,13 @@ router.get('/api/admin/users', authenticateJWT, async (req: Request, res: Respon
 // ONBOARDING ROUTES
 // ==========================================
 
-// POST /api/user/onboarding/complete
-router.post('/api/user/onboarding/complete', authenticateJWT, async (req: Request, res: Response): Promise<void> => {
-    const userId = req.user?.id;
+// This endpoint is obsolete and is being removed.
+// The logic has been correctly moved to the email-sync-proxy-service
+// to associate onboarding completion with a specific email account.
 
-    if (!userId) {
-        // This should not happen if authenticateJWT middleware is working correctly
-        res.status(401).json({ message: 'User not authenticated' });
-        return;
-    }
-
-    try {
-        console.log(`[USER_SVC] Marking onboarding as complete for user: ${userId}`);
-
-        await db
-            .update(users)
-            .set({ onboardingCompleted: true, updatedAt: new Date() })
-            .where(eq(users.id, userId));
-        
-        res.status(200).json({ message: 'Onboarding marked as complete.' });
-
-    } catch (error: any) {
-        console.error(`[USER_SVC] Error completing onboarding for user ${userId}:`, error);
-        res.status(500).json({ message: 'Failed to update onboarding status.' });
-    }
-});
+// ==========================================
+// BACKGROUND JOB / QUEUE MANAGEMENT
+// ==========================================
 
 // POST /api/user/onboarding/start
 router.post('/api/user/onboarding/start', authenticateJWT, async (req: Request, res: Response): Promise<void> => {

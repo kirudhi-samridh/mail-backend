@@ -59,6 +59,7 @@ export const emailAccounts = pgTable('email_accounts', {
   providerAccountId: varchar('provider_account_id', { length: 255 }),
   syncEnabled: boolean('sync_enabled').default(true),
   isPrimary: boolean('is_primary').default(false),
+  onboardingCompleted: boolean('onboarding_completed').default(false),
   syncStatus: varchar('sync_status', { length: 50 }).default('active'),
   syncCursor: varchar('sync_cursor', { length: 255 }), // For incremental sync
   lastSyncAt: timestamp('last_sync_at'),

@@ -112,7 +112,7 @@ const msEmailServiceProxy = createProxyMiddleware({
 // Clean routing - direct route handlers without prefix stripping
 app.post('/api/auth/signup', userServiceProxy);
 app.post('/api/auth/login', userServiceProxy);
-app.get('/api/auth/status', userServiceProxy);
+app.get('/api/auth/status', emailServiceProxy);
 
 // User management routes
 app.get('/api/user/onboarding/progress/:correlationId', userServiceProxy);
@@ -120,10 +120,14 @@ app.post('/api/user/onboarding/start', userServiceProxy);
 app.get('/api/user/emails', userServiceProxy);
 
 // Gmail routes
-app.post('/api/auth/google/callback', emailServiceProxy);
+app.get('/api/auth/google', emailServiceProxy);
+app.get('/api/auth/google/callback', emailServiceProxy);
 app.get('/api/labels', emailServiceProxy);
 app.get('/api/emails', emailServiceProxy);
 app.get('/api/emails/:emailId', emailServiceProxy);
+
+// Account management routes
+app.post('/api/accounts/complete-onboarding', emailServiceProxy);
 
 // Microsoft/O365 routes
 app.get('/api/auth/microsoft/authorize', msEmailServiceProxy);

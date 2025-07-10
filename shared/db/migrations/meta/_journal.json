@@ -8,6 +8,13 @@
       "when": 1751098720016,
       "tag": "0000_fluffy_morg",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1752045540842,
+      "tag": "0001_fast_wallflower",
+      "breakpoints": true
     }
   ]
 }

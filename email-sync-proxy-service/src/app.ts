@@ -27,7 +27,7 @@ const db = getDb();
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
-  'postmessage'
+  `${process.env.API_GATEWAY_URL || 'http://localhost:3001'}/api/auth/google/callback` // Use the full redirect URI
 );
 
 // Middleware
@@ -89,23 +89,88 @@ export { io };
 // Routes
 const router = express.Router();
 
-// POST /api/auth/google/callback - Handle Google OAuth callback
-router.post('/api/auth/google/callback', authenticateJWT, async (req: Request, res: Response): Promise<void> => {
-    const { code } = req.body;
-    const saasUserId = req.user!.id;
+/**
+ * GET /api/auth/status
+ * Checks the user's authentication status and connected email services
+ */
+router.get('/api/auth/status', authenticateJWT, async (req: Request, res: Response) => {
+    const userId = req.user!.id;
+    console.log(`[EMAIL_SVC] Checking auth status for user: ${userId}`);
     
-    console.log(`[EMAIL_SVC] Google auth callback for user: ${saasUserId}`);
+    try {
+        const accounts = await db.query.emailAccounts.findMany({
+            where: eq(emailAccounts.userId, userId),
+        });
 
-    if (!code) {
-        console.error('[EMAIL_SVC] Auth code missing from request body.');
-        res.status(400).json({ message: 'Google authentication code is required.' });
+        const googleAccount = accounts.find(a => a.provider === 'google');
+        const o365Account = accounts.find(a => a.provider === 'microsoft');
+        
+        res.status(200).json({
+            isAuthenticated: true,
+            isGoogleConnected: !!googleAccount,
+            isO365Connected: !!o365Account,
+            connectedAccounts: accounts.map(a => ({
+                id: a.id,
+                provider: a.provider,
+                emailAddress: a.emailAddress,
+                isPrimary: a.isPrimary,
+                onboardingCompleted: a.onboardingCompleted,
+            })),
+            // Onboarding is considered complete if ANY account has finished the process.
+            onboardingCompleted: accounts.some(a => a.onboardingCompleted),
+        });
+    } catch (error: any) {
+        console.error(`[EMAIL_SVC] Error checking auth status for user ${userId}:`, error.message);
+        res.status(500).json({ message: 'Failed to check authentication status.' });
+    }
+});
+
+// GET /api/auth/google - Start the Google OAuth flow
+router.get('/api/auth/google', authenticateJWT, (req: Request, res: Response) => {
+    const scopes = [
+        'https://www.googleapis.com/auth/gmail.readonly',
+        'https://www.googleapis.com/auth/userinfo.email',
+        'https://www.googleapis.com/auth/userinfo.profile',
+    ];
+    
+    // Pass the user's ID through the state parameter to link the session
+    const state = Buffer.from(JSON.stringify({ userId: req.user!.id })).toString('base64');
+
+    const authorizationUrl = oauth2Client.generateAuthUrl({
+        access_type: 'offline',
+        scope: scopes,
+        prompt: 'consent', // Force refresh token to be sent every time
+        state: state
+    });
+
+    res.json({ authorizationUrl });
+});
+
+
+// POST /api/auth/google/callback - Handle Google OAuth callback
+router.get('/api/auth/google/callback', async (req: Request, res: Response) => {
+    const { code, state } = req.query;
+    
+    if (!code || !state) {
+        res.status(400).send('Missing code or state from Google');
         return;
     }
 
+    let saasUserId: string;
     try {
-        const { tokens } = await oauth2Client.getToken(code);
+        const decodedState = JSON.parse(Buffer.from(state as string, 'base64').toString('utf8'));
+        saasUserId = decodedState.userId;
+        if (!saasUserId) throw new Error('User ID missing from state');
+    } catch (e) {
+        res.status(400).send('Invalid state parameter');
+        return;
+    }
+    
+    console.log(`[EMAIL_SVC] Google auth callback for user: ${saasUserId}`);
+
+    try {
+        const { tokens } = await oauth2Client.getToken(code as string);
         
-        // Get user's email address from Google to identify the account
         oauth2Client.setCredentials(tokens);
         const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
         const profileResponse = await gmail.users.getProfile({ userId: 'me' });
@@ -122,14 +187,11 @@ router.post('/api/auth/google/callback', authenticateJWT, async (req: Request, r
         });
 
         const { refresh_token, access_token, expiry_date } = tokens;
-
-        // On re-authentication, Google may not send a new refresh token.
-        // We must preserve the one we have.
         const finalRefreshToken = refresh_token || existingAccount?.refreshToken;
 
         if (!finalRefreshToken) {
-             console.error('[EMAIL_SVC] No refresh token available for new or existing account.');
-             res.status(400).json({ message: 'Google authentication failed: No refresh token received.' });
+             console.error('[EMAIL_SVC] No refresh token available.');
+             res.status(400).send('Google authentication failed: No refresh token received.');
              return;
         }
 
@@ -142,29 +204,73 @@ router.post('/api/auth/google/callback', authenticateJWT, async (req: Request, r
             tokenExpiresAt: expiry_date ? new Date(expiry_date) : null,
             updatedAt: new Date(),
         };
+        
+        let accountId: string;
 
         if (existingAccount) {
             await db.update(emailAccounts)
                 .set(accountData)
                 .where(eq(emailAccounts.id, existingAccount.id));
+            accountId = existingAccount.id;
             console.log(`[EMAIL_SVC] Successfully updated Google account for user: ${saasUserId}`);
         } else {
-            await db.insert(emailAccounts).values({
+            const [newAccount] = await db.insert(emailAccounts).values({
                 ...accountData,
-                // These fields are only set on creation
-                isPrimary: true, // Assuming the first connected account is primary
+                isPrimary: true,
                 syncEnabled: true,
-            });
+                onboardingCompleted: false, // Explicitly set to false on creation
+            }).returning({ id: emailAccounts.id });
+            accountId = newAccount.id;
             console.log(`[EMAIL_SVC] Successfully stored new Google account for user: ${saasUserId}`);
         }
         
-        res.status(200).json({ message: 'Google account connected successfully!' });
+        // Redirect to frontend onboarding page with the account ID
+        res.redirect(`http://localhost:3000/onboarding?accountId=${accountId}`);
 
     } catch (error: any) {
         console.error('[EMAIL_SVC] Error in Google auth callback:', error.message);
-        res.status(500).json({ message: 'Failed to connect Google account.' });
+        res.status(500).send('Failed to connect Google account.');
     }
 });
+
+/**
+ * POST /api/accounts/complete-onboarding
+ * Marks the user's primary email account as having completed onboarding.
+ */
+router.post('/api/accounts/complete-onboarding', authenticateJWT, async (req: Request, res: Response): Promise<void> => {
+    const userId = req.user!.id;
+    const { accountId } = req.body; // Expect accountId from the frontend
+
+    if (!accountId) {
+        res.status(400).json({ message: 'accountId is required.' });
+        return;
+    }
+
+    console.log(`[EMAIL_SVC] Received request to complete onboarding for account: ${accountId} for user: ${userId}`);
+
+    try {
+        const [accountToUpdate] = await db.update(emailAccounts)
+            .set({ onboardingCompleted: true, updatedAt: new Date() })
+            .where(and(
+                eq(emailAccounts.id, accountId),
+                eq(emailAccounts.userId, userId) // Ensure user owns the account
+            ))
+            .returning();
+        
+        if (!accountToUpdate) {
+            console.error(`[EMAIL_SVC] Account ${accountId} not found for user ${userId}.`);
+            return res.status(404).json({ message: 'Account not found or you do not have permission to update it.' });
+        }
+
+        console.log(`[EMAIL_SVC] Successfully marked onboarding as complete for account: ${accountToUpdate.emailAddress}`);
+        res.status(200).json({ message: 'Onboarding completed successfully.' });
+
+    } catch (error: any) {
+        console.error(`[EMAIL_SVC] Error completing onboarding for user ${userId}:`, error.message);
+        res.status(500).json({ message: 'Failed to update onboarding status.' });
+    }
+});
+
 
 /**
  * Helper function to get an authenticated Gmail client for a user
