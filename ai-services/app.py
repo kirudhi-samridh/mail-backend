@@ -2,7 +2,7 @@ import os
 import logging
 import re
 from datetime import datetime
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import requests
 import jwt
@@ -15,6 +15,12 @@ import io
 import json
 import re
 import ast # Used for safely evaluating string representations of dictionaries
+from gtts import gTTS
+import ffmpeg
+import tempfile
+from PIL import Image, ImageDraw, ImageFont
+import subprocess
+import html
 
 # Load environment variables
 load_dotenv(os.path.join(os.path.dirname(__file__), '../.env'))
@@ -2442,6 +2448,196 @@ def generate_daily_digest():
     except Exception as e:
         logger.error(f"Error generating daily digest for user {user_id}: {str(e)}")
         return jsonify({'message': 'Failed to generate daily digest'}), 500
+
+def create_digest_image(text, width=1280, height=720):
+    """Creates a PNG image with the provided text."""
+    img = Image.new('RGB', (width, height), color = (26, 36, 90))
+    d = ImageDraw.Draw(img)
+    
+    # Try to use a common font, fallback to default
+    try:
+        font = ImageFont.truetype("arial.ttf", 40)
+    except IOError:
+        font = ImageFont.load_default(size=40)
+
+    # Simple text wrapping
+    lines = []
+    words = text.split()
+    current_line = ""
+    for word in words:
+        if d.textlength(current_line + word, font=font) <= width - 100:
+            current_line += word + " "
+        else:
+            lines.append(current_line)
+            current_line = word + " "
+    lines.append(current_line)
+
+    # Draw text on image
+    y_text = 100
+    for line in lines:
+        d.text((50, y_text), line, font=font, fill=(255, 255, 255))
+        y_text += 50
+
+    # Save to an in-memory file
+    image_fp = io.BytesIO()
+    img.save(image_fp, format='PNG')
+    image_fp.seek(0)
+    return image_fp
+
+@app.route('/api/daily-digest/generate-video', methods=['POST'])
+@authenticate_jwt
+def generate_digest_video():
+    """
+    Generates a video (MP4) by combining a generated image of the digest text
+    with the spoken audio of the audio script.
+    """
+    user_id = request.user.get('id')
+    logger.info(f"Received request to generate daily digest video for user: {user_id}")
+    
+    data = request.get_json()
+    if not data or 'audioScript' not in data or 'digestHtml' not in data:
+        return jsonify({'message': 'audioScript and digestHtml are required'}), 400
+
+    audio_script = data['audioScript']
+    html_content = data['digestHtml']
+
+    # A more robust method to convert HTML to clean, formatted text
+    # 1. Add newlines after block elements for structure
+    text = re.sub(r'</(p|li|h[1-6]|div|tr)>', r'\n', html_content, flags=re.IGNORECASE)
+    text = re.sub(r'<br\s*/?>', r'\n', text, flags=re.IGNORECASE)
+    # 2. Strip all remaining HTML tags
+    text = re.sub(r'<[^>]+>', ' ', text)
+    # 3. Decode HTML entities like &amp;
+    text = html.unescape(text)
+    # 4. Clean up whitespace and create the final text
+    digest_text = '\n'.join([line.strip() for line in text.splitlines() if line.strip()])
+
+
+    if not all([audio_script, digest_text]):
+        return jsonify({'message': 'audioScript and digestHtml cannot be empty'}), 400
+
+    temp_audio_file = None
+    temp_image_file = None
+    temp_video_file = None
+
+    try:
+        # 1. Generate Audio and save to a temporary file
+        tts = gTTS(text=audio_script, lang='en', slow=False)
+        temp_audio_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp3')
+        tts.write_to_fp(temp_audio_file)
+        temp_audio_file.close()
+        logger.info(f"Generated temporary audio file: {temp_audio_file.name}")
+
+        # 2. Generate Image and save to a temporary file
+        image_fp = create_digest_image(digest_text)
+        temp_image_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+        temp_image_file.write(image_fp.read())
+        temp_image_file.close()
+        logger.info(f"Generated temporary image file: {temp_image_file.name}")
+
+        # 3. Use FFmpeg to combine audio and image into a video
+        temp_video_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+        temp_video_file.close()
+
+        # Allow specifying ffmpeg path via environment variable
+        ffmpeg_path = os.getenv('FFMPEG_PATH', 'ffmpeg')
+
+        # Use subprocess to call ffmpeg directly, bypassing the ffmpeg-python library bugs
+        ffmpeg_cmd = [
+            ffmpeg_path,
+            '-loop', '1',
+            '-i', temp_image_file.name,
+            '-i', temp_audio_file.name,
+            '-c:v', 'libx264',
+            '-c:a', 'aac',
+            '-shortest',
+            '-pix_fmt', 'yuv420p',
+            '-y',  # Overwrite output file
+            temp_video_file.name
+        ]
+        
+        result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            logger.error(f"FFmpeg command failed: {result.stderr}")
+            return jsonify({'message': 'Failed to generate video due to FFmpeg error.', 'details': result.stderr}), 500
+
+        logger.info(f"Generated temporary video file: {temp_video_file.name}")
+        
+        # 4. Send the video file
+        return send_file(
+            temp_video_file.name,
+            mimetype='video/mp4',
+            as_attachment=True,
+            download_name='daily_digest.mp4'
+        )
+
+    except subprocess.CalledProcessError as e:
+        logger.error(f"FFmpeg subprocess failed: {e.stderr}")
+        return jsonify({'message': 'Failed to generate video due to FFmpeg subprocess error.', 'details': str(e)}), 500
+    except ffmpeg.Error as e:
+        error_details = e.stderr.decode('utf8')
+        logger.error(f"FFmpeg failed: {error_details}")
+        return jsonify({'message': 'Failed to generate video due to FFmpeg error.', 'details': error_details}), 500
+    except Exception as e:
+        logger.error(f"An unexpected error occurred in generate_digest_video: {str(e)}")
+        return jsonify({'message': 'An internal server error occurred while generating the video file.'}), 500
+
+    finally:
+        # 5. Clean up temporary files (but not the video file - Flask needs it for the response)
+        if temp_audio_file and os.path.exists(temp_audio_file.name):
+            os.remove(temp_audio_file.name)
+            logger.info(f"Cleaned up temp audio file: {temp_audio_file.name}")
+        if temp_image_file and os.path.exists(temp_image_file.name):
+            os.remove(temp_image_file.name)
+            logger.info(f"Cleaned up temp image file: {temp_image_file.name}")
+        # Note: We don't delete the video file here because Flask's send_file() needs it
+        # Flask will handle cleanup after the response is sent
+
+@app.route('/api/daily-digest/generate-audio', methods=['POST'])
+@authenticate_jwt
+def generate_digest_audio():
+    """
+    Generates a spoken audio file (MP3) from the provided audio script text.
+    """
+    user_id = request.user.get('id')
+    logger.info(f"Received request to generate daily digest audio for user: {user_id}")
+    
+    try:
+        data = request.get_json()
+        if not data or 'audioScript' not in data:
+            logger.warning("Request is missing 'audioScript' field.")
+            return jsonify({'message': 'audioScript is required'}), 400
+            
+        script = data['audioScript']
+        if not script or not script.strip():
+            logger.warning("audioScript is empty.")
+            return jsonify({'message': 'audioScript cannot be empty'}), 400
+
+        logger.info(f"Generating audio for script: '{script[:80]}...'")
+
+        # --- Text-to-Speech Conversion ---
+        # Create a gTTS object
+        tts = gTTS(text=script, lang='en', slow=False)
+        
+        # Save the speech to an in-memory file
+        audio_fp = io.BytesIO()
+        tts.write_to_fp(audio_fp)
+        audio_fp.seek(0) # Rewind the file pointer to the beginning
+
+        logger.info("Successfully generated audio file in memory.")
+
+        # --- Send the Audio File ---
+        return send_file(
+            audio_fp,
+            mimetype='audio/mpeg',
+            as_attachment=True,
+            download_name='daily_digest.mp3'
+        )
+
+    except Exception as e:
+        logger.error(f"An unexpected error occurred in generate_digest_audio: {str(e)}")
+        return jsonify({'message': 'An internal server error occurred while generating the audio file.'}), 500
 
 @app.errorhandler(404)
 def not_found(error):

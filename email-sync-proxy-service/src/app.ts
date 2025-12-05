@@ -172,12 +172,33 @@ router.get('/api/auth/google/callback', async (req: Request, res: Response) => {
         const { tokens } = await oauth2Client.getToken(code as string);
         
         oauth2Client.setCredentials(tokens);
-        const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-        const profileResponse = await gmail.users.getProfile({ userId: 'me' });
-        const emailAddress = profileResponse.data.emailAddress;
-
-        if (!emailAddress) {
-            throw new Error('Could not retrieve email address from Google');
+        
+        let emailAddress: string;
+        
+        // Try Gmail API first (original approach)
+        try {
+            const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+            const profileResponse = await gmail.users.getProfile({ userId: 'me' });
+            emailAddress = profileResponse.data.emailAddress || '';
+            
+            if (emailAddress) {
+                console.log(`[EMAIL_SVC] Retrieved email address from Gmail API: ${emailAddress}`);
+            } else {
+                throw new Error('No email address from Gmail API');
+            }
+        } catch (gmailError: any) {
+            console.log(`[EMAIL_SVC] Gmail API failed, trying Google+ API: ${gmailError.message}`);
+            
+            // Fallback to Google+ API
+            const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
+            const userInfo = await oauth2.userinfo.get();
+            emailAddress = userInfo.data.email || '';
+            
+            if (!emailAddress) {
+                throw new Error('Could not retrieve email address from either Gmail or Google+ API');
+            }
+            
+            console.log(`[EMAIL_SVC] Retrieved email address from Google+ API: ${emailAddress}`);
         }
 
         console.log(`[EMAIL_SVC] Retrieved email address: ${emailAddress} for user ${saasUserId}`);
@@ -229,6 +250,7 @@ router.get('/api/auth/google/callback', async (req: Request, res: Response) => {
 
     } catch (error: any) {
         console.error('[EMAIL_SVC] Error in Google auth callback:', error.message);
+        console.error('[EMAIL_SVC] Full error:', error);
         res.status(500).send('Failed to connect Google account.');
     }
 });

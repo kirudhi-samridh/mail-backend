@@ -141,6 +141,7 @@ app.get('/api/ms/emails/:emailId', msEmailServiceProxy);
 app.post('/api/emails/:emailId/summarize', aiServiceProxy);
 app.post('/api/ai/generate-content', aiServiceProxy);
 app.post('/api/daily-digest/generate', aiServiceProxy);
+app.post('/api/daily-digest/generate-video', aiServiceProxy);
 
 // New Batch Summarization Route
 app.post('/api/summarize-batch', emailServiceProxy);
