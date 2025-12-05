@@ -14,8 +14,7 @@
     "dev": "concurrently \"npm run dev:user\" \"npm run dev:email\" \"npm run dev:gateway\"",
     "dev:user": "cd user-management-service && npm run dev",
     "dev:email": "cd email-sync-proxy-service && npm run dev",
-    "dev:gateway": "cd api-gateway && npm run dev",
-    "start": "node start-services.js"
+    "dev:gateway": "cd api-gateway && npm run dev"
   },
   "repository": {
     "type": "git",
