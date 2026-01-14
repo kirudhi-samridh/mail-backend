@@ -1,7 +1,3 @@
-# LMAA Backend
-
-A microservices-based backend architecture for the LMAA (Let Me Ask AI) email management application.
-
 ## Architecture Overview
 
 The backend consists of the following microservices:
@@ -186,3 +182,4 @@ Each service provides a health check endpoint:
 - User Service: `GET /health`
 - Email Service: `GET /emails/health`
 - AI Services: `GET /health`
+
